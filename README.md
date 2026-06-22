@@ -1,10 +1,8 @@
-```html
 <p align="center">
   <a href="https://github.com/Kvanta-Organization/Kvanta5-Core/releases">
     <img src="https://img.shields.io/github/downloads/Kvanta-Organization/Kvanta5-Core/total?style=for-the-badge" alt="Downloads">
   </a>
 </p>
-```
 
 
 
