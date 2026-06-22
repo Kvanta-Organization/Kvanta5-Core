@@ -1,3 +1,14 @@
+```html
+<p align="center">
+  <a href="https://github.com/Kvanta-Organization/Kvanta5-Core/releases">
+    <img src="https://img.shields.io/github/downloads/Kvanta-Organization/Kvanta5-Core/total?style=for-the-badge" alt="Downloads">
+  </a>
+</p>
+```
+
+
+
+
 # Kvanta5 Core
 
 Kvanta5 Core is the reference implementation for the Kvanta5 network: a live proof-of-work blockchain built around native quantum-resistant ownership, large-scale settlement capacity, and long-term monetary durability.
@@ -118,20 +129,6 @@ Consumer-grade systems may still operate pruned nodes, wallet nodes, or lightwei
 Kvanta5 is security-critical software. Bugs can result in loss of funds, network instability, invalid transaction handling, wallet corruption, or chain consensus failures.
 
 Testing is strongly encouraged for all changes.
-
-Unit tests can be compiled and run with:
-
-```bash
-ctest
-```
-
-Functional tests can be run with:
-
-```bash
-build/test/functional/test_runner.py
-```
-
-assuming `build` is your build directory and the functional test dependencies are installed.
 
 Developers are encouraged to write tests that are specific to Kvanta5 behavior, especially where Kvanta5 intentionally differs from Bitcoin Core.
 
