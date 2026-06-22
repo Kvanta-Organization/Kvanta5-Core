@@ -22,7 +22,8 @@ https://Kvanta5.org
 Releases:
 https://github.com/Kvanta-Organization/Kvanta5-Core/releases
 
-
+Technical Assistance:
+https://discord.gg/qmVwkcU5ju
 
 ## What Is Kvanta5?
 
