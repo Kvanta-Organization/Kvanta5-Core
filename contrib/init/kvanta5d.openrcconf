@@ -1,0 +1,33 @@
+# /etc/conf.d/kvanta5d: config file for /etc/init.d/kvanta5d
+
+# Config file location
+#KVANTA5D_CONFIGFILE="/etc/kvanta5/kvanta5.conf"
+
+# What directory to write pidfile to?  (created and owned by $KVANTA5D_USER)
+#KVANTA5D_PIDDIR="/var/run/kvanta5d"
+
+# What filename to give the pidfile
+#KVANTA5D_PIDFILE="${KVANTA5D_PIDDIR}/kvanta5d.pid"
+
+# Where to write kvanta5d data (be mindful that the blockchain is large)
+#KVANTA5D_DATADIR="/var/lib/kvanta5d"
+
+# User and group to own kvanta5d process
+#KVANTA5D_USER="kvanta5"
+#KVANTA5D_GROUP="kvanta5"
+
+# Path to kvanta5d executable
+#KVANTA5D_BIN="/usr/bin/kvanta5d"
+
+# Nice value to run kvanta5d under
+#KVANTA5D_NICE=0
+
+# Additional options (avoid -conf and -datadir, use flags above)
+#KVANTA5D_OPTS=""
+
+# The timeout in seconds OpenRC will wait for kvanta5d to terminate
+# after a SIGTERM has been raised.
+# Note that this will be mapped as argument to start-stop-daemon's
+# '--retry' option, which means you can specify a retry schedule
+# here. For more information see man 8 start-stop-daemon.
+KVANTA5D_SIGTERM_TIMEOUT=600

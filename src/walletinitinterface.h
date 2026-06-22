@@ -1,0 +1,31 @@
+// Copyright (c) 2015-2026 The Bitcoin Core developers
+// Copyright (c) 2026 The Kvanta5 Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#ifndef KVANTA5_WALLETINITINTERFACE_H
+#define KVANTA5_WALLETINITINTERFACE_H
+
+class ArgsManager;
+
+namespace node {
+struct NodeContext;
+} // namespace node
+
+class WalletInitInterface {
+public:
+    /** Is the wallet component enabled */
+    virtual bool HasWalletSupport() const = 0;
+    /** Get wallet help string */
+    virtual void AddWalletOptions(ArgsManager& argsman) const = 0;
+    /** Check wallet parameter interaction */
+    virtual bool ParameterInteraction() const = 0;
+    /** Add wallets that should be opened to list of chain clients. */
+    virtual void Construct(node::NodeContext& node) const = 0;
+
+    virtual ~WalletInitInterface() = default;
+};
+
+extern const WalletInitInterface& g_wallet_init_interface;
+
+#endif // KVANTA5_WALLETINITINTERFACE_H

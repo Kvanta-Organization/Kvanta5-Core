@@ -1,0 +1,93 @@
+#!/sbin/openrc-run
+
+# backward compatibility for existing gentoo layout 
+#
+if [ -d "/var/lib/kvanta5/.kvanta5" ]; then
+	KVANTA5D_DEFAULT_DATADIR="/var/lib/kvanta5/.kvanta5"
+else
+	KVANTA5D_DEFAULT_DATADIR="/var/lib/kvanta5d"
+fi
+
+KVANTA5D_CONFIGFILE=${KVANTA5D_CONFIGFILE:-/etc/kvanta5/kvanta5.conf}
+KVANTA5D_PIDDIR=${KVANTA5D_PIDDIR:-/var/run/kvanta5d}
+KVANTA5D_PIDFILE=${KVANTA5D_PIDFILE:-${KVANTA5D_PIDDIR}/kvanta5d.pid}
+KVANTA5D_DATADIR=${KVANTA5D_DATADIR:-${KVANTA5D_DEFAULT_DATADIR}}
+KVANTA5D_USER=${KVANTA5D_USER:-${KVANTA5_USER:-kvanta5}}
+KVANTA5D_GROUP=${KVANTA5D_GROUP:-kvanta5}
+KVANTA5D_BIN=${KVANTA5D_BIN:-/usr/bin/kvanta5d}
+KVANTA5D_NICE=${KVANTA5D_NICE:-${NICELEVEL:-0}}
+KVANTA5D_OPTS="${KVANTA5D_OPTS:-${KVANTA5_OPTS}}"
+
+name="Kvanta5 Core Daemon"
+description="Kvanta5 cryptocurrency P2P network daemon"
+
+command="/usr/bin/kvanta5d"
+command_args="-pid=\"${KVANTA5D_PIDFILE}\" \
+		-conf=\"${KVANTA5D_CONFIGFILE}\" \
+		-datadir=\"${KVANTA5D_DATADIR}\" \
+		-daemon \
+		${KVANTA5D_OPTS}"
+
+required_files="${KVANTA5D_CONFIGFILE}"
+start_stop_daemon_args="-u ${KVANTA5D_USER} \
+			-N ${KVANTA5D_NICE} -w 2000"
+pidfile="${KVANTA5D_PIDFILE}"
+
+# The retry schedule to use when stopping the daemon. Could be either
+# a timeout in seconds or multiple signal/timeout pairs (like
+# "SIGKILL/180 SIGTERM/300")
+retry="${KVANTA5D_SIGTERM_TIMEOUT}"
+
+depend() {
+	need localmount net
+}
+
+# verify
+# 1) that the datadir exists and is writable (or create it)
+# 2) that a directory for the pid exists and is writable
+# 3) ownership and permissions on the config file
+start_pre() {
+	checkpath \
+	-d \
+	--mode 0750 \
+	--owner "${KVANTA5D_USER}:${KVANTA5D_GROUP}" \
+	"${KVANTA5D_DATADIR}"
+
+	checkpath \
+	-d \
+	--mode 0755 \
+	--owner "${KVANTA5D_USER}:${KVANTA5D_GROUP}" \
+	"${KVANTA5D_PIDDIR}"
+
+	checkpath -f \
+	-o "${KVANTA5D_USER}:${KVANTA5D_GROUP}" \
+	-m 0660 \
+	"${KVANTA5D_CONFIGFILE}"
+
+	checkconfig || return 1
+}
+
+checkconfig()
+{
+	if grep -qs '^rpcuser=' "${KVANTA5D_CONFIGFILE}" && \
+		! grep -qs '^rpcpassword=' "${KVANTA5D_CONFIGFILE}" ; then
+		eerror ""
+		eerror "ERROR: You must set a secure rpcpassword to run kvanta5d."
+		eerror "The setting must appear in ${KVANTA5D_CONFIGFILE}"
+		eerror ""
+		eerror "This password is security critical to securing wallets "
+		eerror "and must not be the same as the rpcuser setting."
+		eerror "You can generate a suitable random password using the following "
+		eerror "command from the shell:"
+		eerror ""
+		eerror "bash -c 'tr -dc a-zA-Z0-9 < /dev/urandom | head -c32 && echo'"
+		eerror ""
+		eerror "It is recommended that you also set alertnotify so you are "
+		eerror "notified of problems:"
+		eerror ""
+		eerror "ie: alertnotify=echo %%s | mail -s \"Kvanta5 Alert\"" \
+			"admin@foo.com"
+		eerror ""
+		return 1
+	fi
+}

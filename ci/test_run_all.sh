@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#
+# Copyright (c) 2015-2026 The Bitcoin Core developers
+# Copyright (c) 2026 The Kvanta5 Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+export LC_ALL=C.UTF-8
+
+set -o errexit; source ./ci/test/00_setup_env.sh
+set -o errexit
+"./ci/test/02_run_container.sh"

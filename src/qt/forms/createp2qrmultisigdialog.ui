@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>CreateP2QRMultisigDialog</class>
+ <widget class="QDialog" name="CreateP2QRMultisigDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>760</width>
+    <height>720</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Create P2QR Multi-Sig Vault</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="description_label">
+     <property name="text">
+      <string>Create a Kvanta5 P2QR Multi-Sig Vault. This wallet generates signer #1. Paste the other signer addresses below.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QFormLayout" name="formLayout">
+     <item row="0" column="0">
+      <widget class="QLabel" name="vault_label_label">
+       <property name="text">
+        <string>Vault label</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QLineEdit" name="vault_label_edit">
+       <property name="placeholderText">
+        <string>Treasury Vault</string>
+       </property>
+      </widget>
+     </item>
+
+     <item row="1" column="0">
+      <widget class="QLabel" name="required_label">
+       <property name="text">
+        <string>Required approvals</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QSpinBox" name="required_spinbox">
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>65535</number>
+       </property>
+       <property name="value">
+        <number>2</number>
+       </property>
+      </widget>
+     </item>
+
+     <item row="2" column="0">
+      <widget class="QLabel" name="total_signers_label">
+       <property name="text">
+        <string>Total signers</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <layout class="QHBoxLayout" name="totalSignersLayout">
+       <item>
+        <widget class="QSpinBox" name="total_signers_spinbox">
+         <property name="minimum">
+          <number>2</number>
+         </property>
+         <property name="maximum">
+          <number>65535</number>
+         </property>
+         <property name="value">
+          <number>3</number>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="threshold_summary_label">
+         <property name="text">
+          <string>2-of-3 vault, 1 of 3 signer addresses entered</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QGroupBox" name="local_signer_group">
+     <property name="title">
+      <string>This wallet's signer key</string>
+     </property>
+     <layout class="QVBoxLayout" name="localSignerLayout">
+      <item>
+       <layout class="QHBoxLayout" name="localButtonLayout">
+        <item>
+         <widget class="QPushButton" name="generate_local_signer_button">
+          <property name="text">
+           <string>Generate New Local Signer</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="copy_local_address_button">
+          <property name="text">
+           <string>Copy Address</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="local_address_label">
+        <property name="text">
+         <string>Local P2QR address</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="local_address_edit">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="local_wrapped_address_label">
+        <property name="text">
+         <string>Local wrapped/mining compatibility address</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="local_wrapped_address_edit">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="local_address_label">
+        <property name="text">
+         <string>Local signer address</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPlainTextEdit" name="local_address_edit">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="maximumHeight">
+         <number>90</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QGroupBox" name="other_signers_group">
+     <property name="title">
+      <string>Other signer addresses</string>
+     </property>
+     <layout class="QVBoxLayout" name="otherSignerLayout">
+      <item>
+       <widget class="QLabel" name="other_addresses_label">
+        <property name="text">
+         <string>Paste one full P2QR signer address per line.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPlainTextEdit" name="other_addresses_edit">
+        <property name="placeholderText">
+         <string>Paste other signer addresses here, one per line</string>
+        </property>
+        <property name="maximumHeight">
+         <number>120</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="include_wrapped_checkbox">
+        <property name="text">
+         <string>Include wrapped mining compatibility address</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QGroupBox" name="result_group">
+     <property name="title">
+      <string>Vault result</string>
+     </property>
+     <layout class="QVBoxLayout" name="resultLayout">
+      <item>
+       <widget class="QPlainTextEdit" name="result_text">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="placeholderText">
+         <string>Vault address and policy details will appear here after creation.</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
