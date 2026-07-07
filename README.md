@@ -203,25 +203,27 @@ A wallet layer that keeps signing.
 A chain that keeps moving.
 
 
-## Kvanta5 Vault Components
+## Mixed Licensing Notice
 
-Certain components in this repository are proprietary Kvanta5 Vault components.
+Kvanta5 Core contains multiple categories of code.
 
-These components may include Vault GUI pages, Vault wallet logic, Vault consensus
-code, Vault validation code, Vault transaction construction code, Vault policy
-logic, Vault metadata handling, and related documentation or resources.
+Bitcoin Core-derived, Dash-derived, and other third-party components remain
+governed by their respective upstream licenses.
 
-Unless a file expressly states otherwise, Vault components marked as proprietary
-are made source-available only for transparency, security review, audit, and
-interoperability verification.
+Beginning with release `v1.0.1`, original Kvanta5 components marked as
+source-available proprietary components are governed by:
 
-They may not be copied, modified, forked, redistributed, published, mirrored,
-reimplemented, sublicensed, sold, commercialized, or used to create derivative
-works without prior express written permission from the Kvanta5 Core Developers
-or an authorized representative of the Kvanta5 Organization.
+`Kvanta5-Source-Available-Proprietary-License.md`
 
-These Vault components are not open-source software and are not licensed under
-the MIT License.
+These components may include Kvanta5 Vault components, Kvanta5 P2QR Transaction
+System components, related GUI components, wallet logic, consensus validation
+logic, documentation, tests, and related source code.
 
-Bitcoin Core-derived, Dash-derived, or other third-party open-source components
-remain subject to their respective licenses and copyright notices.
+They may not be copied, modified, forked, redistributed, reimplemented,
+commercialized, used in competing blockchain or wallet systems, or used to
+create derivative works without prior express written permission from the
+Kvanta5 Core Developers or an authorized representative of the Kvanta5
+Organization.
+
+Earlier public releases remain governed by the license terms under which they
+were originally published.
