@@ -1,7 +1,13 @@
-// Copyright (c) 2015-2026 The Bitcoin Core developers
+// Copyright (c) 2009-2026 The Bitcoin Core developers
+// Copyright (c) 2014-2026 The Dash Core / Darkcoin developers
 // Copyright (c) 2026 The Kvanta5 Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+//
+// Difficulty retargeting in this file is based on Dark Gravity Wave v3,
+// originally authored by Evan Duffield for Dash/Darkcoin, and adapted for
+// Kvanta5 using modern Bitcoin Core arithmetic, consensus parameters,
+// MedianTimePast-based timing, a 24-block lookback, and a ±4x adjustment bound.
 
 #ifndef KVANTA5_POW_H
 #define KVANTA5_POW_H
