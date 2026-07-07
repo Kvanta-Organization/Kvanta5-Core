@@ -1,3 +1,8 @@
+// Copyright 2026 The Kvanta5 Core Developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+
 #include <crypto/pq/mldsa87/mldsa87.h>
 
 extern "C" {
