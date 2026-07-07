@@ -1,4 +1,16 @@
-// src/qt/vaultspage.cpp
+// Copyright (c) 2026 Kvanta5 Core Developers.
+// Copyright (c) 2026 Kvanta5 Organization.
+// All rights reserved.
+//
+// Kvanta5 Vault Component.
+// Proprietary source-available code for review and security inspection only.
+//
+// No copying, modification, forking, redistribution, publication,
+// sublicensing, reimplementation, derivative works, or commercial use is
+// permitted without prior express written permission from the Kvanta5 Core
+// Developers or an authorized representative of the Kvanta5 Organization.
+//
+// This file is NOT licensed under the MIT License.
 
 #include <qt/vaultspage.h>
 
