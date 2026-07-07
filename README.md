@@ -201,3 +201,27 @@ The goal is simple:
 A monetary network that keeps validating.
 A wallet layer that keeps signing.
 A chain that keeps moving.
+
+
+## Kvanta5 Vault Components
+
+Certain components in this repository are proprietary Kvanta5 Vault components.
+
+These components may include Vault GUI pages, Vault wallet logic, Vault consensus
+code, Vault validation code, Vault transaction construction code, Vault policy
+logic, Vault metadata handling, and related documentation or resources.
+
+Unless a file expressly states otherwise, Vault components marked as proprietary
+are made source-available only for transparency, security review, audit, and
+interoperability verification.
+
+They may not be copied, modified, forked, redistributed, published, mirrored,
+reimplemented, sublicensed, sold, commercialized, or used to create derivative
+works without prior express written permission from the Kvanta5 Core Developers
+or an authorized representative of the Kvanta5 Organization.
+
+These Vault components are not open-source software and are not licensed under
+the MIT License.
+
+Bitcoin Core-derived, Dash-derived, or other third-party open-source components
+remain subject to their respective licenses and copyright notices.
