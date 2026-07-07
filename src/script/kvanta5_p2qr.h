@@ -1,3 +1,34 @@
+// Copyright (c) 2026 Kvanta5 Core Developers.
+// Copyright (c) 2026 Kvanta5 Organization.
+// All rights reserved.
+//
+// Kvanta5 P2QR Transaction System Component.
+//
+// This file contains original Kvanta5 P2QR transaction system code,
+// including but not limited to P2QR output recognition, P2QR redeem-script
+// construction, P2SH-wrapped P2QR compatibility handling, P2QR signature-hash
+// construction, ML-DSA-87 spend validation, P2QR multisig validation,
+// signer-policy validation, and related consensus-critical transaction logic.
+//
+// Source access, if provided, is for transparency, audit, review,
+// interoperability verification, and security inspection only.
+//
+// No permission is granted to copy, reproduce, modify, fork, adapt, translate,
+// publish, distribute, sublicense, sell, lease, mirror, host, reimplement,
+// create derivative works from, or use this file or any substantial portion
+// of the Kvanta5 P2QR Transaction System without prior express written
+// permission from the Kvanta5 Core Developers or an authorized representative
+// of the Kvanta5 Organization.
+//
+// This file is NOT licensed under the MIT License.
+// This file is NOT open-source software.
+// This file is NOT free software.
+// All rights not expressly granted in writing are reserved.
+//
+// Third-party components, including Bitcoin Core-derived code and external
+// cryptographic libraries, remain subject to their own license terms.
+
+
 #ifndef KVANTA5_SCRIPT_KVANTA5_P2QR_H
 #define KVANTA5_SCRIPT_KVANTA5_P2QR_H
 
