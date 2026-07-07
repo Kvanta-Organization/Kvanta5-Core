@@ -1,3 +1,8 @@
+// Copyright 2026 The Kvanta5 Core Developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+
 #ifndef KVANTA5_CRYPTO_PQ_MLDSA87_H
 #define KVANTA5_CRYPTO_PQ_MLDSA87_H
 
