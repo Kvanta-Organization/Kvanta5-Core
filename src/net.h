@@ -82,7 +82,11 @@ static const int MAX_BLOCK_RELAY_ONLY_CONNECTIONS = 2;
 /** Maximum number of feeler connections */
 static const int MAX_FEELER_CONNECTIONS = 1;
 /** -listen default */
+#if defined(__APPLE__)
+static const bool DEFAULT_LISTEN = false;
+#else
 static const bool DEFAULT_LISTEN = true;
+#endif
 /** The maximum number of peer connections to maintain. */
 static const unsigned int DEFAULT_MAX_PEER_CONNECTIONS = 125;
 /** The default for -maxuploadtarget. 0 = Unlimited */
