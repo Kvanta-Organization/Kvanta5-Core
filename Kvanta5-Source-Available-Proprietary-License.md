@@ -57,7 +57,6 @@ proprietary components, including without limitation:
 The P2QR covered components include original Kvanta5 transaction-system code
 such as P2QR sighash construction, P2QR output handling, P2SH-wrapped P2QR
 compatibility handling, ML-DSA-87 spend validation, and P2QR multisig validation.
-:contentReference[oaicite:2]{index=2}
 
 ---
 
