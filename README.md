@@ -1,9 +1,10 @@
 <p align="center">
   <a href="https://github.com/Kvanta-Organization/Kvanta5-Core/releases">
-    <img src="https://img.shields.io/github/downloads/Kvanta-Organization/Kvanta5-Core/total?style=for-the-badge&cacheSeconds=60&kvanta5=public1" alt="Downloads">
+    <img
+      src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FKvanta-Organization%2FKvanta5-Core%2Fbadges%2Fdownloads.json&style=for-the-badge&cacheSeconds=300"
+      alt="Downloads">
   </a>
 </p>
-
 
 
 # Kvanta5 Core
