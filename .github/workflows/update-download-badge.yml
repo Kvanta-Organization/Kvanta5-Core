@@ -1,0 +1,104 @@
+name: Update download badge
+
+on:
+  workflow_dispatch:
+
+  release:
+    types:
+      - published
+      - edited
+      - deleted
+
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-download-badge
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Count public release downloads
+        id: count
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          total="$(
+            gh api --paginate \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.draft == false) | .assets[].download_count' |
+            awk '{ total += $1 } END { print total + 0 }'
+          )"
+
+          echo "total=${total}" >> "${GITHUB_OUTPUT}"
+          echo "Total public release downloads: ${total}"
+
+      - name: Publish badge data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOTAL: ${{ steps.count.outputs.total }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf badge-output
+          mkdir -p badge-output
+
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          total = int(os.environ["TOTAL"])
+
+          def compact(value: int) -> str:
+              if value >= 1_000_000_000:
+                  result = f"{value / 1_000_000_000:.1f}B"
+              elif value >= 1_000_000:
+                  result = f"{value / 1_000_000:.1f}M"
+              elif value >= 1_000:
+                  result = f"{value / 1_000:.1f}k"
+              else:
+                  return str(value)
+
+              return result.replace(".0", "")
+
+          payload = {
+              "schemaVersion": 1,
+              "label": "downloads",
+              "message": compact(total),
+              "color": "blue",
+          }
+
+          Path("badge-output/downloads.json").write_text(
+              json.dumps(payload, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          cd badge-output
+
+          git init -b badges
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add downloads.json
+          git commit -m "Update download badge: ${TOTAL}"
+
+          gh auth setup-git
+          git remote add origin \
+            "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          git push --force origin badges
