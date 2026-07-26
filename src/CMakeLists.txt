@@ -16,7 +16,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 # are set, so output locations of subproject tests and libraries are
 # not overridden.
 include(../cmake/crc32c.cmake)
-include(../cmake/leveldb.cmake)
+include(../cmake/rocksdb.cmake)
 include(../cmake/minisketch.cmake)
 add_subdirectory(univalue)
 #=============================
@@ -320,7 +320,7 @@ target_link_libraries(kvanta5_node
     kvanta5_common
     kvanta5_util
     $<TARGET_NAME_IF_EXISTS:kvanta5_zmq>
-    leveldb
+    kvanta5_rocksdb
     minisketch
     univalue
     Boost::headers

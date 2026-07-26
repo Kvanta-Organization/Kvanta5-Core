@@ -54,7 +54,7 @@ public:
     bool NeedsUpgrade();
     size_t EstimateSize() const override;
 
-    //! Dynamically alter the underlying leveldb cache size.
+    //! Dynamically alter the underlying RocksDB cache size.
     void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     //! @returns filesystem path to on-disk storage or std::nullopt if in memory.

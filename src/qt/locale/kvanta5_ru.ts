@@ -2441,8 +2441,8 @@ Go to File &gt; Open Wallet to load a wallet.
         <translation type="unfinished">Исходящие соединения ограничены сетью i2p (-onlynet=i2p), но -i2psam не задан</translation>
     </message>
     <message>
-        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate leveldb directory.</source>
-        <translation type="unfinished">Переименование '%s' -&gt; '%s' не удалось. Не удается очистить фоновый каталог leveldb состояния цепочки блоков.</translation>
+        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate RocksDB directory.</source>
+        <translation type="unfinished">Переименование '%s' -&gt; '%s' не удалось. Не удается очистить фоновый каталог RocksDB состояния цепочки блоков.</translation>
     </message>
     <message>
         <source>The combination of the pre-selected inputs and the wallet automatic inputs selection exceeds the transaction maximum weight. Please try sending a smaller amount or manually consolidating your wallet's UTXOs</source>

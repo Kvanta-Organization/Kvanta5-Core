@@ -4424,8 +4424,8 @@ Téigh go Comhad &gt; Oscail Sparán chun sparán a lódáil.
         <translation type="unfinished">Tá naisc amach teoranta do i2p (-onlynet=i2p) ach ní chuirtear -i2psam ar fáil</translation>
     </message>
     <message>
-        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate leveldb directory.</source>
-        <translation type="unfinished">Theip ar athainmniú '%s' -&gt; '%s'. Ní féidir eolaire leveldb an tslabhra cúlra a ghlanadh.</translation>
+        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate RocksDB directory.</source>
+        <translation type="unfinished">Theip ar athainmniú '%s' -&gt; '%s'. Ní féidir eolaire RocksDB an tslabhra cúlra a ghlanadh.</translation>
     </message>
     <message>
         <source>Specified -blockmaxweight (%d) exceeds consensus maximum block weight (%d)</source>

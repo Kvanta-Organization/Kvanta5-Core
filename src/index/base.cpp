@@ -44,10 +44,11 @@ CBlockLocator GetLocator(interfaces::Chain& chain, const uint256& block_hash)
     return locator;
 }
 
-BaseIndex::DB::DB(const fs::path& path, size_t n_cache_size, bool f_memory, bool f_wipe, bool f_obfuscate) :
+BaseIndex::DB::DB(const fs::path& path, size_t n_cache_size, DBProfile profile, bool f_memory, bool f_wipe, bool f_obfuscate) :
     CDBWrapper{DBParams{
         .path = path,
         .cache_bytes = n_cache_size,
+        .profile = profile,
         .memory_only = f_memory,
         .wipe_data = f_wipe,
         .obfuscate = f_obfuscate,

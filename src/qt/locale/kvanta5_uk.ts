@@ -4496,8 +4496,8 @@ Go to File &gt; Open Wallet to load a wallet.
         <translation type="unfinished">Вихідні з'єднання, обмежені i2p (-onlynet=i2p), але -i2psam не надаються</translation>
     </message>
     <message>
-        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate leveldb directory.</source>
-        <translation type="unfinished">Не вдалося перейменувати '%s' -&gt; '%s'. Неможливо очистити leveldb каталог фонового стану блокчейну.</translation>
+        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate RocksDB directory.</source>
+        <translation type="unfinished">Не вдалося перейменувати '%s' -&gt; '%s'. Неможливо очистити RocksDB каталог фонового стану блокчейну.</translation>
     </message>
     <message>
         <source>Specified -blockmaxweight (%d) exceeds consensus maximum block weight (%d)</source>

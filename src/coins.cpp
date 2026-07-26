@@ -10,11 +10,13 @@
 #include <random.h>
 #include <util/trace.h>
 
+
 TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
 TRACEPOINT_SEMAPHORE(utxocache, uncache);
 
 std::optional<Coin> CCoinsView::GetCoin(const COutPoint& outpoint) const { return std::nullopt; }
+
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }
 std::vector<uint256> CCoinsView::GetHeadBlocks() const { return std::vector<uint256>(); }
 bool CCoinsView::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) { return false; }
@@ -300,6 +302,7 @@ bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
             }
         }
     }
+
     return true;
 }
 
@@ -352,11 +355,18 @@ static const size_t MAX_OUTPUTS_PER_BLOCK = MAX_BLOCK_WEIGHT / MIN_TRANSACTION_O
 const Coin& AccessByTxid(const CCoinsViewCache& view, const Txid& txid)
 {
     COutPoint iter(txid, 0);
+
     while (iter.n < MAX_OUTPUTS_PER_BLOCK) {
-        const Coin& alternate = view.AccessCoin(iter);
-        if (!alternate.IsSpent()) return alternate;
+        const Coin& alternate =
+            view.AccessCoin(iter);
+
+        if (!alternate.IsSpent()) {
+            return alternate;
+        }
+
         ++iter.n;
     }
+
     return coinEmpty;
 }
 

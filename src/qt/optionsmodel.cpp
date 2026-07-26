@@ -471,7 +471,13 @@ QVariant OptionsModel::getOption(OptionID option, const std::string& suffix) con
                suffix.empty()          ? getOption(option, "-prev") :
                                          DEFAULT_PRUNE_TARGET_GB;
     case DatabaseCache:
-        return qlonglong(SettingToInt(setting(), DEFAULT_DB_CACHE >> 20));
+        return qlonglong(
+            SettingToInt(
+                setting(),
+                node::GetAutomaticDbCache() >>
+                    20
+            )
+        );
     case ThreadsScriptVerif:
         return qlonglong(SettingToInt(setting(), DEFAULT_SCRIPTCHECK_THREADS));
     case Listen:
@@ -730,13 +736,65 @@ void OptionsModel::checkAndMigrate()
     int settingsVersion = settings.contains(strSettingsVersionKey) ? settings.value(strSettingsVersionKey).toInt() : 0;
     if (settingsVersion < CLIENT_VERSION)
     {
-        // -dbcache was bumped from 100 to 300 in 0.13
-        // see https://github.com/kvanta5/kvanta5/pull/8273
-        // force people to upgrade to the new value if they are using 100MB
-        if (settingsVersion < 130000 && settings.contains("nDatabaseCache") && settings.value("nDatabaseCache").toLongLong() == 100)
-            settings.setValue("nDatabaseCache", (qint64)(DEFAULT_DB_CACHE >> 20));
+        /*
+         * Old stock GUI defaults must not become permanent
+         * overrides of the hardware-aware automatic cache.
+         */
+        if (
+            settings.contains(
+                "nDatabaseCache"
+            )
+        ) {
+            const qint64 legacy_cache{
+                settings
+                    .value(
+                        "nDatabaseCache"
+                    )
+                    .toLongLong()
+            };
 
-        settings.setValue(strSettingsVersionKey, CLIENT_VERSION);
+            if (
+                legacy_cache == 100 ||
+                legacy_cache == 300 ||
+                legacy_cache == 450
+            ) {
+                settings.remove(
+                    "nDatabaseCache"
+                );
+            }
+        }
+
+        const common::SettingsValue
+            persistent_cache{
+                node()
+                    .getPersistentSetting(
+                        "dbcache"
+                    )
+            };
+
+        const int64_t
+            persistent_cache_mib{
+                SettingToInt(
+                    persistent_cache,
+                    -1
+                )
+            };
+
+        if (
+            persistent_cache_mib == 100 ||
+            persistent_cache_mib == 300 ||
+            persistent_cache_mib == 450
+        ) {
+            node().updateRwSetting(
+                "dbcache",
+                {}
+            );
+        }
+
+        settings.setValue(
+            strSettingsVersionKey,
+            CLIENT_VERSION
+        );
     }
 
     // Overwrite the 'addrProxy' setting in case it has been set to an illegal

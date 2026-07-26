@@ -4289,8 +4289,8 @@ Bitte nutzen Sie entweder "bdb" oder "sqlite".</translation>
         <translation type="unfinished">Ausgehende Verbindungen sind auf i2p (-onlynet=i2p) beschränkt, aber -i2psam ist nicht angegeben</translation>
     </message>
     <message>
-        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate leveldb directory.</source>
-        <translation type="unfinished">Die Umbenennung von '%s' -&gt; '%s' ist fehlgeschlagen. Das Hintergrund-Verzeichnis chainstate leveldb kann nicht bereinigt werden.</translation>
+        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate RocksDB directory.</source>
+        <translation type="unfinished">Die Umbenennung von '%s' -&gt; '%s' ist fehlgeschlagen. Das Hintergrund-Verzeichnis chainstate RocksDB kann nicht bereinigt werden.</translation>
     </message>
     <message>
         <source>Specified -blockmaxweight (%d) exceeds consensus maximum block weight (%d)</source>

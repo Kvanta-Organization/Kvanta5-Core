@@ -132,7 +132,7 @@ target_link_libraries(kvanta5qt
   PRIVATE
     core_interface
     kvanta5_cli
-    leveldb
+    kvanta5_rocksdb
     Boost::headers
     $<TARGET_NAME_IF_EXISTS:QRencode::QRencode>
     $<$<PLATFORM_ID:Darwin>:-framework\ AppKit>

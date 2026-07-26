@@ -124,6 +124,7 @@ int main(int argc, char* argv[])
         .block_tree_db_params = DBParams{
             .path = abs_datadir / "blocks" / "index",
             .cache_bytes = cache_sizes.block_tree_db,
+            .profile = DBProfile::BLOCK_INDEX,
         },
     };
     util::SignalInterrupt interrupt;

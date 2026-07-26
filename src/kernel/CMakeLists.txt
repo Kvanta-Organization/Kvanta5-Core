@@ -86,7 +86,7 @@ target_link_libraries(kvanta5kernel
     core_interface
     kvanta5_clientversion
     kvanta5_crypto
-    leveldb
+    kvanta5_rocksdb
     secp256k1
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
   PUBLIC

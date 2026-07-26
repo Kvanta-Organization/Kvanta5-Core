@@ -16,6 +16,7 @@
 #include <util/hasher.h>
 
 #include <deque>
+#include <memory>
 #include <vector>
 
 // A compressed CBlockHeader, which leaves out the prevhash
@@ -41,7 +42,8 @@ struct CompressedHeader {
         nNonce = header.nNonce;
     }
 
-    CBlockHeader GetFullHeader(const uint256& hash_prev_block) {
+    CBlockHeader GetFullHeader(const uint256& hash_prev_block)
+    {
         CBlockHeader ret;
         ret.nVersion = nVersion;
         ret.hashPrevBlock = hash_prev_block;
@@ -50,7 +52,7 @@ struct CompressedHeader {
         ret.nBits = nBits;
         ret.nNonce = nNonce;
         return ret;
-    };
+    }
 };
 
 /** HeadersSyncState:
@@ -108,36 +110,54 @@ public:
          * sufficient work and we're only building commitments to the chain they
          * serve us. */
         PRESYNC,
+
         /** REDOWNLOAD means the peer has given us a high-enough-work chain,
          * and now we're redownloading the headers we saw before and trying to
          * accept them */
         REDOWNLOAD,
+
         /** We're done syncing with this peer and can discard any remaining state */
         FINAL
     };
 
     /** Return the current state of our download */
-    State GetState() const { return m_download_state; }
+    State GetState() const
+    {
+        return m_download_state;
+    }
 
     /** Return the height reached during the PRESYNC phase */
-    int64_t GetPresyncHeight() const { return m_current_height; }
+    int64_t GetPresyncHeight() const
+    {
+        return m_current_height;
+    }
 
-    /** Return the block timestamp of the last header received during the PRESYNC phase. */
-    uint32_t GetPresyncTime() const { return m_last_header_received.nTime; }
+    /** Return the block timestamp of the last header received during PRESYNC. */
+    uint32_t GetPresyncTime() const
+    {
+        return m_last_header_received.nTime;
+    }
 
-    /** Return the amount of work in the chain received during the PRESYNC phase. */
-    arith_uint256 GetPresyncWork() const { return m_current_chain_work; }
+    /** Return the amount of work in the chain received during PRESYNC. */
+    arith_uint256 GetPresyncWork() const
+    {
+        return m_current_chain_work;
+    }
 
     /** Construct a HeadersSyncState object representing a headers sync via this
-     *  download-twice mechanism).
+     * download-twice mechanism.
      *
-     * id: node id (for logging)
-     * consensus_params: parameters needed for difficulty adjustment validation
-     * chain_start: best known fork point that the peer's headers branch from
-     * minimum_required_work: amount of chain work required to accept the chain
+     * id: node id for logging
+     * consensus_params: parameters needed for difficulty validation
+     * chain_start: best known fork point that the peer's branch builds from
+     * minimum_required_work: work required before accepting the chain
      */
-    HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
-            const CBlockIndex* chain_start, const arith_uint256& minimum_required_work);
+    HeadersSyncState(
+        NodeId id,
+        const Consensus::Params& consensus_params,
+        const CBlockIndex* chain_start,
+        const arith_uint256& minimum_required_work
+    );
 
     /** Result data structure for ProcessNextHeaders. */
     struct ProcessingResult {
@@ -146,133 +166,138 @@ public:
         bool request_more{false};
     };
 
-    /** Process a batch of headers, once a sync via this mechanism has started
+    /** Process a batch of headers after sync through this mechanism begins.
      *
-     * received_headers: headers that were received over the network for processing.
-     *                   Assumes the caller has already verified the headers
-     *                   are continuous, and has checked that each header
-     *                   satisfies the proof-of-work target included in the
-     *                   header (but not necessarily verified that the
-     *                   proof-of-work target is correct and passes consensus
-     *                   rules).
-     * full_headers_message: true if the message was at max capacity,
-     *                       indicating more headers may be available
-     * ProcessingResult.pow_validated_headers: will be filled in with any
-     *                       headers that the caller can fully process and
-     *                       validate now (because these returned headers are
-     *                       on a chain with sufficient work)
-     * ProcessingResult.success: set to false if an error is detected and the sync is
-     *                       aborted; true otherwise.
-     * ProcessingResult.request_more: if true, the caller is suggested to call
-     *                       NextHeadersRequestLocator and send a getheaders message using it.
+     * received_headers: headers received over the network.
+     *                   The caller has already checked continuity and verified
+     *                   that each header satisfies its claimed PoW target, but
+     *                   has not necessarily verified that the target itself is
+     *                   correct under consensus rules.
+     *
+     * full_headers_message: true when the message was at maximum capacity.
+     *
+     * ProcessingResult.pow_validated_headers: headers now ready for complete
+     *                   validation because the branch has sufficient work.
+     *
+     * ProcessingResult.success: false when an error aborts synchronization.
+     *
+     * ProcessingResult.request_more: true when another GETHEADERS is suggested.
      */
-    ProcessingResult ProcessNextHeaders(const std::vector<CBlockHeader>&
-            received_headers, bool full_headers_message);
+    ProcessingResult ProcessNextHeaders(
+        const std::vector<CBlockHeader>& received_headers,
+        bool full_headers_message
+    );
 
-    /** Issue the next GETHEADERS message to our peer.
-     *
-     * This will return a locator appropriate for the current sync object, to continue the
-     * synchronization phase it is in.
-     */
+    /** Return a locator appropriate for the current synchronization phase. */
     CBlockLocator NextHeadersRequestLocator() const;
 
 protected:
-    /** The (secret) offset on the heights for which to create commitments.
+    /** Secret offset selecting heights at which commitments are created.
      *
-     * m_header_commitments entries are created at any height h for which
-     * (h % HEADER_COMMITMENT_PERIOD) == m_commit_offset. */
+     * m_header_commitments entries are created at every height h for which:
+     *
+     *     h % HEADER_COMMITMENT_PERIOD == m_commit_offset
+     */
     const unsigned m_commit_offset;
 
 private:
-    /** Clear out all download state that might be in progress (freeing any used
-     * memory), and mark this object as no longer usable.
-     */
+    /** Rolling temporary CBlockIndex history used to reproduce KV5 DGW exactly
+     * without inserting low-work headers into the global block index. */
+    using DgwHistory = std::deque<std::unique_ptr<CBlockIndex>>;
+
+    /** Clear all in-progress download state and mark this object unusable. */
     void Finalize();
 
-    /**
-     *  Only called in PRESYNC.
-     *  Validate the work on the headers we received from the network, and
-     *  store commitments for later. Update overall state with successfully
-     *  processed headers.
-     *  On failure, this invokes Finalize() and returns false.
-     */
-    bool ValidateAndStoreHeadersCommitments(const std::vector<CBlockHeader>& headers);
+    /** Reset a DGW history to m_chain_start and the ancestors required for
+     * the 24-block DGW window and 11-block MTP calculations. */
+    void ResetDgwHistory(DgwHistory& history) const;
 
-    /** In PRESYNC, process and update state for a single header */
+    /** Verify that a candidate header has the exact nBits required by the
+     * production GetNextWorkRequired() calculation and obeys the MTP rule. */
+    bool ValidateDgwHeader(
+        const CBlockHeader& header,
+        int64_t next_height,
+        const DgwHistory& history,
+        const char* phase
+    ) const;
+
+    /** Append a validated header to a bounded rolling DGW history. */
+    void AppendDgwHeader(
+        DgwHistory& history,
+        const CBlockHeader& header,
+        int64_t height
+    );
+
+    /** Validate PRESYNC headers and store commitments for REDOWNLOAD. */
+    bool ValidateAndStoreHeadersCommitments(
+        const std::vector<CBlockHeader>& headers
+    );
+
+    /** Process one header during PRESYNC. */
     bool ValidateAndProcessSingleHeader(const CBlockHeader& current);
 
-    /** In REDOWNLOAD, check a header's commitment (if applicable) and add to
-     * buffer for later processing */
+    /** Validate and buffer one header during REDOWNLOAD. */
     bool ValidateAndStoreRedownloadedHeader(const CBlockHeader& header);
 
-    /** Return a set of headers that satisfy our proof-of-work threshold */
+    /** Return headers that satisfy the work and commitment requirements. */
     std::vector<CBlockHeader> PopHeadersReadyForAcceptance();
 
-private:
-    /** NodeId of the peer (used for log messages) **/
+    /** NodeId of the peer, used for log messages. */
     const NodeId m_id;
 
-    /** We use the consensus params in our anti-DoS calculations */
+    /** Consensus parameters used by anti-DoS and exact DGW validation. */
     const Consensus::Params& m_consensus_params;
 
-    /** Store the last block in our block index that the peer's chain builds from */
+    /** Last indexed block from which the peer's branch builds. */
     const CBlockIndex* m_chain_start{nullptr};
 
-    /** Minimum work that we're looking for on this chain. */
+    /** Minimum work required before accepting the peer's chain. */
     const arith_uint256 m_minimum_required_work;
 
-    /** Work that we've seen so far on the peer's chain */
+    /** Work observed during PRESYNC. */
     arith_uint256 m_current_chain_work;
 
-    /** m_hasher is a salted hasher for making our 1-bit commitments to headers we've seen. */
+    /** Salted hasher used for one-bit header commitments. */
     const SaltedTxidHasher m_hasher;
 
-    /** A queue of commitment bits, created during the 1st phase, and verified during the 2nd. */
+    /** Commitments created during PRESYNC and checked during REDOWNLOAD. */
     bitdeque<> m_header_commitments;
 
-    /** m_max_commitments is a bound we calculate on how long an honest peer's chain could be,
-     * given the MTP rule.
-     *
-     * Any peer giving us more headers than this will have its sync aborted. This serves as a
-     * memory bound on m_header_commitments. */
+    /** Maximum commitment count permitted for this synchronization attempt. */
     uint64_t m_max_commitments{0};
 
-    /** Store the latest header received while in PRESYNC (initialized to m_chain_start) */
+    /** Latest header received during PRESYNC. */
     CBlockHeader m_last_header_received;
 
-    /** Height of m_last_header_received */
+    /** Height of m_last_header_received. */
     int64_t m_current_height{0};
 
-    /** During phase 2 (REDOWNLOAD), we buffer redownloaded headers in memory
-     *  until enough commitments have been verified; those are stored in
-     *  m_redownloaded_headers */
+    /** Exact DGW/MTP history for PRESYNC. */
+    DgwHistory m_presync_dgw_history;
+
+    /** Exact DGW/MTP history for REDOWNLOAD. */
+    DgwHistory m_redownload_dgw_history;
+
+    /** Headers buffered during REDOWNLOAD until sufficient commitments have
+     * been verified above them. */
     std::deque<CompressedHeader> m_redownloaded_headers;
 
-    /** Height of last header in m_redownloaded_headers */
+    /** Height of the last buffered REDOWNLOAD header. */
     int64_t m_redownload_buffer_last_height{0};
 
-    /** Hash of last header in m_redownloaded_headers (initialized to
-     * m_chain_start). We have to cache it because we don't have hashPrevBlock
-     * available in a CompressedHeader.
-     */
+    /** Hash of the last buffered REDOWNLOAD header. */
     uint256 m_redownload_buffer_last_hash;
 
-    /** The hashPrevBlock entry for the first header in m_redownloaded_headers
-     * We need this to reconstruct the full header when it's time for
-     * processing.
-     */
+    /** Previous hash used to reconstruct the first compressed header. */
     uint256 m_redownload_buffer_first_prev_hash;
 
-    /** The accumulated work on the redownloaded chain. */
+    /** Work accumulated during REDOWNLOAD. */
     arith_uint256 m_redownload_chain_work;
 
-    /** Set this to true once we encounter the target blockheader during phase
-     * 2 (REDOWNLOAD). At this point, we can process and store all remaining
-     * headers still in m_redownloaded_headers.
-     */
+    /** True after REDOWNLOAD reaches the minimum required work. */
     bool m_process_all_remaining_headers{false};
 
-    /** Current state of our headers sync. */
+    /** Current headers synchronization state. */
     State m_download_state{State::PRESYNC};
 };
 

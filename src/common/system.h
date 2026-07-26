@@ -9,6 +9,7 @@
 #include <kvanta5-build-config.h> // IWYU pragma: keep
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 // Application startup time (used for uptime calculation)
@@ -16,17 +17,25 @@ int64_t GetStartupTime();
 
 void SetupEnvironment();
 [[nodiscard]] bool SetupNetworking();
+
 #ifndef WIN32
 std::string ShellEscape(const std::string& arg);
 #endif
+
 #if HAVE_SYSTEM
 void runCommand(const std::string& strCommand);
 #endif
 
 /**
  * Return the number of cores available on the current system.
- * @note This does count virtual cores, such as those provided by HyperThreading.
+ *
+ * This includes virtual cores such as those provided by HyperThreading.
  */
 int GetNumCores();
+
+/**
+ * Return total installed physical memory in bytes when it can be detected.
+ */
+std::optional<uint64_t> GetTotalPhysicalMemory();
 
 #endif // KVANTA5_COMMON_SYSTEM_H

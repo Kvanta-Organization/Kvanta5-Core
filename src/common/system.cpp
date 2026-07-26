@@ -12,10 +12,20 @@
 #include <util/time.h>
 
 #ifndef WIN32
+
 #include <sys/stat.h>
+#include <unistd.h>
+
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
+
 #else
+
 #include <compat/compat.h>
+
 #include <codecvt>
+
 #endif
 
 #ifdef HAVE_MALLOPT_ARENA_MAX
@@ -23,7 +33,9 @@
 #endif
 
 #include <cstdlib>
+#include <limits>
 #include <locale>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -34,69 +46,130 @@ using util::ReplaceAll;
 const int64_t nStartupTime = GetTime();
 
 #ifndef WIN32
+
 std::string ShellEscape(const std::string& arg)
 {
     std::string escaped = arg;
-    ReplaceAll(escaped, "'", "'\"'\"'");
+
+    ReplaceAll(
+        escaped,
+        "'",
+        "'\"'\"'"
+    );
+
     return "'" + escaped + "'";
 }
+
 #endif
 
 #if HAVE_SYSTEM
+
 void runCommand(const std::string& strCommand)
 {
-    if (strCommand.empty()) return;
+    if (strCommand.empty()) {
+        return;
+    }
+
 #ifndef WIN32
-    int nErr = ::system(strCommand.c_str());
+
+    int nErr = ::system(
+        strCommand.c_str()
+    );
+
 #else
-    int nErr = ::_wsystem(std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>,wchar_t>().from_bytes(strCommand).c_str());
+
+    int nErr = ::_wsystem(
+        std::wstring_convert<
+            std::codecvt_utf8_utf16<wchar_t>,
+            wchar_t
+        >()
+            .from_bytes(strCommand)
+            .c_str()
+    );
+
 #endif
-    if (nErr)
-        LogPrintf("runCommand error: system(%s) returned %d\n", strCommand, nErr);
+
+    if (nErr) {
+        LogPrintf(
+            "runCommand error: system(%s) returned %d\n",
+            strCommand,
+            nErr
+        );
+    }
 }
+
 #endif
 
 void SetupEnvironment()
 {
 #ifdef HAVE_MALLOPT_ARENA_MAX
-    // glibc-specific: On 32-bit systems set the number of arenas to 1.
-    // By default, since glibc 2.10, the C library will create up to two heap
-    // arenas per core. This is known to cause excessive virtual address space
-    // usage in our usage. Work around it by setting the maximum number of
-    // arenas to 1.
+
+    /*
+     * glibc-specific:
+     *
+     * On 32-bit systems set the number of arenas to one.
+     */
     if (sizeof(void*) == 4) {
-        mallopt(M_ARENA_MAX, 1);
+        mallopt(
+            M_ARENA_MAX,
+            1
+        );
     }
+
 #endif
-    // On most POSIX systems (e.g. Linux, but not BSD) the environment's locale
-    // may be invalid, in which case the "C.UTF-8" locale is used as fallback.
-#if !defined(WIN32) && !defined(__APPLE__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__)
+
+#if !defined(WIN32) && \
+    !defined(__APPLE__) && \
+    !defined(__FreeBSD__) && \
+    !defined(__OpenBSD__) && \
+    !defined(__NetBSD__)
+
     try {
-        std::locale(""); // Raises a runtime error if current locale is invalid
+        std::locale("");
     } catch (const std::runtime_error&) {
-        setenv("LC_ALL", "C.UTF-8", 1);
+        setenv(
+            "LC_ALL",
+            "C.UTF-8",
+            1
+        );
     }
+
 #elif defined(WIN32)
-    // Set the default input/output charset is utf-8
+
     SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
+
 #endif
 
 #ifndef WIN32
+
     constexpr mode_t private_umask = 0077;
     umask(private_umask);
+
 #endif
 }
 
 bool SetupNetworking()
 {
 #ifdef WIN32
-    // Initialize Windows Sockets
+
     WSADATA wsadata;
-    int ret = WSAStartup(MAKEWORD(2,2), &wsadata);
-    if (ret != NO_ERROR || LOBYTE(wsadata.wVersion ) != 2 || HIBYTE(wsadata.wVersion) != 2)
+
+    int ret = WSAStartup(
+        MAKEWORD(2, 2),
+        &wsadata
+    );
+
+    if (
+        ret != NO_ERROR ||
+        LOBYTE(wsadata.wVersion) != 2 ||
+        HIBYTE(wsadata.wVersion) != 2
+    ) {
         return false;
+    }
+
 #endif
+
     return true;
 }
 
@@ -105,7 +178,90 @@ int GetNumCores()
     return std::thread::hardware_concurrency();
 }
 
-// Obtain the application startup time (used for uptime calculation)
+std::optional<uint64_t> GetTotalPhysicalMemory()
+{
+#ifdef WIN32
+
+    MEMORYSTATUSEX status{};
+    status.dwLength = sizeof(status);
+
+    if (
+        !GlobalMemoryStatusEx(&status) ||
+        status.ullTotalPhys == 0
+    ) {
+        return std::nullopt;
+    }
+
+    return static_cast<uint64_t>(
+        status.ullTotalPhys
+    );
+
+#elif defined(__APPLE__)
+
+    uint64_t memory_bytes{0};
+
+    size_t memory_size{
+        sizeof(memory_bytes)
+    };
+
+    if (
+        sysctlbyname(
+            "hw.memsize",
+            &memory_bytes,
+            &memory_size,
+            nullptr,
+            0
+        ) != 0 ||
+        memory_size != sizeof(memory_bytes) ||
+        memory_bytes == 0
+    ) {
+        return std::nullopt;
+    }
+
+    return memory_bytes;
+
+#else
+
+    const long physical_pages{
+        sysconf(_SC_PHYS_PAGES)
+    };
+
+    const long page_size{
+        sysconf(_SC_PAGESIZE)
+    };
+
+    if (
+        physical_pages <= 0 ||
+        page_size <= 0
+    ) {
+        return std::nullopt;
+    }
+
+    const uint64_t pages{
+        static_cast<uint64_t>(
+            physical_pages
+        )
+    };
+
+    const uint64_t bytes_per_page{
+        static_cast<uint64_t>(
+            page_size
+        )
+    };
+
+    if (
+        pages >
+        std::numeric_limits<uint64_t>::max() /
+            bytes_per_page
+    ) {
+        return std::nullopt;
+    }
+
+    return pages * bytes_per_page;
+
+#endif
+}
+
 int64_t GetStartupTime()
 {
     return nStartupTime;

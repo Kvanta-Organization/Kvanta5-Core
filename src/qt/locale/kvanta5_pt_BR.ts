@@ -4053,8 +4053,8 @@ Go to File &gt; Open Wallet to load a wallet.
         <translation type="unfinished">Conexões de saída limitadas a rede i2p (-onlynet=i2p), mas -i2psam não foi configurado</translation>
     </message>
     <message>
-        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate leveldb directory.</source>
-        <translation type="unfinished">Renomear de '%s' -&gt; '%s'falhou. Não é possível limpar o diretório leveldb do chainstate em segundo plano.</translation>
+        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate RocksDB directory.</source>
+        <translation type="unfinished">Renomear de '%s' -&gt; '%s'falhou. Não é possível limpar o diretório RocksDB do chainstate em segundo plano.</translation>
     </message>
     <message>
         <source>Specified -blockmaxweight (%d) exceeds consensus maximum block weight (%d)</source>

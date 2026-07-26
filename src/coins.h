@@ -20,7 +20,9 @@
 #include <stdint.h>
 
 #include <functional>
+#include <optional>
 #include <unordered_map>
+#include <vector>
 
 /**
  * A UTXO entry.
@@ -502,7 +504,7 @@ void AddCoins(CCoinsViewCache& cache, const CTransaction& tx, int nHeight, bool 
 const Coin& AccessByTxid(const CCoinsViewCache& cache, const Txid& txid);
 
 /**
- * This is a minimally invasive approach to shutdown on LevelDB read errors from the
+ * This is a minimally invasive approach to shutdown on RocksDB read errors from the
  * chainstate, while keeping user interface out of the common library, which is shared
  * between kvanta5d, and kvanta5-qt and non-server tools.
  *
@@ -521,7 +523,7 @@ public:
     bool HaveCoin(const COutPoint &outpoint) const override;
 
 private:
-    /** A list of callbacks to execute upon leveldb read error. */
+    /** A list of callbacks to execute upon RocksDB read error. */
     std::vector<std::function<void()>> m_err_callbacks;
 
 };

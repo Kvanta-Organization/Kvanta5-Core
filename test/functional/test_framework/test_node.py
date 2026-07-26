@@ -116,7 +116,7 @@ class TestNode():
             "-logtimemicros",
             "-debug",
             "-debugexclude=libevent",
-            "-debugexclude=leveldb",
+            "-debugexclude=rocksdb",
             "-debugexclude=rand",
             "-uacomment=testnode%d" % i,  # required for subversion uniqueness across peers
         ]

@@ -203,6 +203,92 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
     }
 }
 
+
+BOOST_AUTO_TEST_CASE(dbwrapper_multiread)
+{
+    for (const bool obfuscate : {false, true}) {
+        const fs::path path{
+            m_args.GetDataDirBase() /
+            (obfuscate ? "dbwrapper_multiread_obfuscated" : "dbwrapper_multiread_plain")
+        };
+
+        CDBWrapper db({
+            .path = path,
+            .cache_bytes = 1U << 20,
+            .memory_only = true,
+            .wipe_data = false,
+            .obfuscate = obfuscate,
+        });
+
+        const uint256 first{m_rng.rand256()};
+        const uint256 second{m_rng.rand256()};
+
+        BOOST_REQUIRE(db.Write(uint8_t{'a'}, first));
+        BOOST_REQUIRE(db.Write(uint8_t{'b'}, second));
+
+        const std::vector<uint8_t> keys{
+            uint8_t{'a'},
+            uint8_t{'x'},
+            uint8_t{'b'},
+            uint8_t{'a'},
+        };
+
+        const auto values{db.MultiRead<uint8_t, uint256>(keys)};
+
+        BOOST_REQUIRE_EQUAL(values.size(), keys.size());
+        BOOST_REQUIRE(values[0]);
+        BOOST_CHECK_EQUAL(values[0]->ToString(), first.ToString());
+        BOOST_CHECK(!values[1]);
+        BOOST_REQUIRE(values[2]);
+        BOOST_CHECK_EQUAL(values[2]->ToString(), second.ToString());
+        BOOST_REQUIRE(values[3]);
+        BOOST_CHECK_EQUAL(values[3]->ToString(), first.ToString());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(dbwrapper_bounded_iterator)
+{
+    const fs::path path{m_args.GetDataDirBase() / "dbwrapper_bounded_iterator"};
+    CDBWrapper db({
+        .path = path,
+        .cache_bytes = 1U << 20,
+        .memory_only = true,
+        .wipe_data = false,
+        .obfuscate = false,
+    });
+
+    BOOST_REQUIRE(db.Write(uint8_t{'i'}, uint32_t{1}));
+    BOOST_REQUIRE(db.Write(uint8_t{'j'}, uint32_t{2}));
+    BOOST_REQUIRE(db.Write(uint8_t{'k'}, uint32_t{3}));
+    BOOST_REQUIRE(db.Write(uint8_t{'l'}, uint32_t{4}));
+
+    std::unique_ptr<CDBIterator> iterator{
+        db.NewIterator(uint8_t{'j'}, uint8_t{'l'})
+    };
+
+    iterator->SeekToFirst();
+
+    uint8_t key{0};
+    uint32_t value{0};
+
+    BOOST_REQUIRE(iterator->Valid());
+    BOOST_REQUIRE(iterator->GetKey(key));
+    BOOST_REQUIRE(iterator->GetValue(value));
+    BOOST_CHECK_EQUAL(key, uint8_t{'j'});
+    BOOST_CHECK_EQUAL(value, 2U);
+
+    iterator->Next();
+    BOOST_REQUIRE(iterator->Valid());
+    BOOST_REQUIRE(iterator->GetKey(key));
+    BOOST_REQUIRE(iterator->GetValue(value));
+    BOOST_CHECK_EQUAL(key, uint8_t{'k'});
+    BOOST_CHECK_EQUAL(value, 3U);
+
+    iterator->Next();
+    BOOST_CHECK(!iterator->Valid());
+}
+
+
 // Test that we do not obfuscation if there is existing data.
 BOOST_AUTO_TEST_CASE(existing_data_no_obfuscate)
 {
@@ -220,7 +306,7 @@ BOOST_AUTO_TEST_CASE(existing_data_no_obfuscate)
     BOOST_CHECK(dbw->Read(key, res));
     BOOST_CHECK_EQUAL(res.ToString(), in.ToString());
 
-    // Call the destructor to free leveldb LOCK
+    // Call the destructor to free the RocksDB LOCK
     dbw.reset();
 
     // Now, set up another wrapper that wants to obfuscate the same directory
@@ -261,7 +347,7 @@ BOOST_AUTO_TEST_CASE(existing_data_reindex)
     BOOST_CHECK(dbw->Read(key, res));
     BOOST_CHECK_EQUAL(res.ToString(), in.ToString());
 
-    // Call the destructor to free leveldb LOCK
+    // Call the destructor to free the RocksDB LOCK
     dbw.reset();
 
     // Simulate a -reindex by wiping the existing data store

@@ -142,7 +142,7 @@ target_link_libraries(fuzz
   kvanta5_common
   kvanta5_util
   minisketch
-  leveldb
+  kvanta5_rocksdb
   univalue
   secp256k1
   Boost::headers

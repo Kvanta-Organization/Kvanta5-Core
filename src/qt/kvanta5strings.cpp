@@ -160,7 +160,7 @@ QT_TRANSLATE_NOOP("kvanta5-core", ""
 "reindex (download the whole blockchain again in case of pruned node)"),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Rename of '%s' -> '%s' failed. Cannot clean up the background chainstate "
-"leveldb directory."),
+"RocksDB directory."),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Rename of '%s' -> '%s' failed. You should resolve this by manually moving or "
 "deleting the invalid snapshot directory %s, otherwise you will encounter the "

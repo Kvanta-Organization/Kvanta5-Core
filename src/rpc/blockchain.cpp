@@ -3114,7 +3114,7 @@ PrepareUTXOSnapshot(
         // based upon the coinsdb, and (iii) constructing a cursor to the
         // coinsdb for use in WriteUTXOSnapshot.
         //
-        // Cursors returned by leveldb iterate over snapshots, so the contents
+        // Cursors returned by RocksDB iterate over snapshots, so the contents
         // of the pcursor will not be affected by simultaneous writes during
         // use below this block.
         //
@@ -3164,7 +3164,7 @@ UniValue WriteUTXOSnapshot(
 
     // To reduce space the serialization format of the snapshot avoids
     // duplication of tx hashes. The code takes advantage of the guarantee by
-    // leveldb that keys are lexicographically sorted.
+    // RocksDB that keys are lexicographically sorted.
     // In the coins vector we collect all coins that belong to a certain tx hash
     // (key.hash) and when we have them all (key.hash != last_hash) we write
     // them to file using the below lambda function.

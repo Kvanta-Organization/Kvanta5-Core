@@ -4397,8 +4397,8 @@ Choďte do Súbor &gt; Otvoriť Peňaženku, pre načítanie peňaženky.
         <translation type="unfinished">Odchádzajúce spojenia sú obmedzené na i2p (-onlynet=i2p), ale parameter "-i2psam" nie je zadaný</translation>
     </message>
     <message>
-        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate leveldb directory.</source>
-        <translation type="unfinished">Premenovanie '%s' -&gt; '%s' zlyhalo. Nemôžem upratať priečinok s leveldb stavu reťazca.</translation>
+        <source>Rename of '%s' -&gt; '%s' failed. Cannot clean up the background chainstate RocksDB directory.</source>
+        <translation type="unfinished">Premenovanie '%s' -&gt; '%s' zlyhalo. Nemôžem upratať priečinok s RocksDB stavu reťazca.</translation>
     </message>
     <message>
         <source>Specified -blockmaxweight (%d) exceeds consensus maximum block weight (%d)</source>
