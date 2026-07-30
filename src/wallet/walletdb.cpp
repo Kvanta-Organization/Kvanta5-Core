@@ -39,6 +39,7 @@ const std::string ACTIVEINTERNALSPK{"activeinternalspk"};
 const std::string BESTBLOCK_NOMERKLE{"bestblock_nomerkle"};
 const std::string BESTBLOCK{"bestblock"};
 const std::string KVANTA5_P2QR_KEY{"kvanta5p2qrkey"};
+const std::string KVANTA5_P2QR_SEED{"kvanta5p2qrseed"};
 const std::string KVANTA5_P2QR_MULTISIG{"kvanta5p2qrmultisig"};
 const std::string CRYPTED_KEY{"ckey"};
 const std::string CSCRIPT{"cscript"};
@@ -128,6 +129,11 @@ bool WalletBatch::WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey,
 bool WalletBatch::WriteKvanta5P2QRKey(const uint256& key_hash, const P2QRKeyRecord& record)
 {
     return WriteIC(std::make_pair(DBKeys::KVANTA5_P2QR_KEY, key_hash), record, false);
+}
+
+bool WalletBatch::WriteKvanta5P2QRSeed(const uint256& key_hash, const P2QRSeedRecord& record)
+{
+    return WriteIC(std::make_pair(DBKeys::KVANTA5_P2QR_SEED, key_hash), record, false);
 }
 
 bool WalletBatch::WriteKvanta5P2QRMultisig(const uint256& program, const Kvanta5P2QRMultisigRecord& record)
@@ -554,15 +560,28 @@ static LoadResult LoadRecords(CWallet* pwallet, DatabaseBatch& batch, const std:
     return LoadRecords(pwallet, batch, key, prefix, load_func);
 }
 
-static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, int last_client) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, int last_client, bool& kvanta5_p2qr_migrated) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
     AssertLockHeld(pwallet->cs_wallet);
+    kvanta5_p2qr_migrated = false;
+
     DBErrors result = DBErrors::LOAD_OK;
+
+    /*
+     * Collect the complete compact P2QR key set while loading.
+     *
+     * Legacy kvanta5p2qrkey records are validated by
+     * CWallet::LoadKvanta5P2QRKey() and converted to seed-only records in
+     * memory. Existing kvanta5p2qrseed records are added to the same map.
+     *
+     * This map is later used for the atomic on-disk migration.
+     */
+    std::map<uint256, P2QRSeedRecord> kvanta5_p2qr_seeds;
 
     // Load native KV5 P2QR seed-backed keys.
     // This is intentionally loaded for both legacy and descriptor wallets.
     LoadResult kvanta5_p2qr_key_res = LoadRecords(pwallet, batch, DBKeys::KVANTA5_P2QR_KEY,
-        [] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& strErr) {
+        [&kvanta5_p2qr_seeds] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& strErr) {
         uint256 key_hash;
         key >> key_hash;
 
@@ -574,10 +593,50 @@ static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, 
             return DBErrors::NONCRITICAL_ERROR;
         }
 
+        P2QRSeedRecord compact_record;
+        compact_record.seed = record.seed;
+        compact_record.creation_time = record.creation_time;
+
+        const auto [it, inserted] =
+            kvanta5_p2qr_seeds.emplace(key_hash, std::move(compact_record));
+
+        if (!inserted) {
+            strErr = "Error reading wallet database: duplicate KVANTA5_P2QR legacy key";
+            return DBErrors::NONCRITICAL_ERROR;
+        }
+
         return DBErrors::LOAD_OK;
     });
     result = std::max(result, kvanta5_p2qr_key_res.m_result);
-    
+
+    LoadResult kvanta5_p2qr_seed_res = LoadRecords(pwallet, batch, DBKeys::KVANTA5_P2QR_SEED,
+        [&kvanta5_p2qr_seeds] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& strErr) {
+        uint256 key_hash;
+        key >> key_hash;
+
+        P2QRSeedRecord record;
+        value >> record;
+
+        if (!pwallet->LoadKvanta5P2QRSeed(key_hash, record)) {
+            strErr = "Error reading wallet database: CWallet::LoadKvanta5P2QRSeed failed";
+            return DBErrors::NONCRITICAL_ERROR;
+        }
+
+        const auto it = kvanta5_p2qr_seeds.find(key_hash);
+        if (it != kvanta5_p2qr_seeds.end()) {
+            if (it->second.seed != record.seed ||
+                it->second.creation_time != record.creation_time) {
+                strErr = "Error reading wallet database: conflicting legacy and compact KVANTA5_P2QR records";
+                return DBErrors::NONCRITICAL_ERROR;
+            }
+        } else {
+            kvanta5_p2qr_seeds.emplace(key_hash, record);
+        }
+
+        return DBErrors::LOAD_OK;
+    });
+    result = std::max(result, kvanta5_p2qr_seed_res.m_result);
+
     LoadResult kvanta5_p2qr_multisig_res = LoadRecords(pwallet, batch, DBKeys::KVANTA5_P2QR_MULTISIG,
         [] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& strErr) {
         uint256 program;
@@ -594,8 +653,135 @@ static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, 
         return DBErrors::LOAD_OK;
     });
     result = std::max(result, kvanta5_p2qr_multisig_res.m_result);
-    
-    
+
+    /*
+     * Automatically migrate legacy KVANTA5_P2QR records to the compact
+     * seed-only representation.
+     *
+     * Do not modify the wallet if any record failed validation.
+     */
+    if (kvanta5_p2qr_key_res.m_records > 0 && result == DBErrors::LOAD_OK) {
+        pwallet->WalletLogPrintf(
+            "Detected %u legacy KVANTA5_P2QR key records. Starting compact seed migration.\n",
+            kvanta5_p2qr_key_res.m_records);
+
+        const fs::path wallet_path =
+            fs::PathFromString(pwallet->GetDatabase().Filename());
+        const fs::path wallet_dir =
+            fs::absolute(wallet_path).parent_path();
+        const fs::path backup_path =
+            wallet_dir / "legacywalletbackup.dat";
+
+        bool backup_exists{false};
+        try {
+            backup_exists = fs::exists(backup_path);
+        } catch (const fs::filesystem_error& e) {
+            pwallet->WalletLogPrintf(
+                "Unable to inspect KVANTA5_P2QR migration backup path '%s': %s\n",
+                fs::PathToString(backup_path),
+                fsbridge::get_filesystem_error_message(e));
+            return DBErrors::CORRUPT;
+        }
+
+        if (backup_exists) {
+            pwallet->WalletLogPrintf(
+                "KVANTA5_P2QR migration backup already exists at '%s'; preserving it.\n",
+                fs::PathToString(backup_path));
+        } else {
+            pwallet->WalletLogPrintf(
+                "Creating pre-migration wallet backup at '%s'.\n",
+                fs::PathToString(backup_path));
+
+            if (!pwallet->GetDatabase().Backup(
+                    fs::PathToString(backup_path))) {
+                pwallet->WalletLogPrintf(
+                    "Unable to create KVANTA5_P2QR migration backup. Wallet was not modified.\n");
+                return DBErrors::CORRUPT;
+            }
+        }
+
+        if (!batch.TxnBegin()) {
+            pwallet->WalletLogPrintf(
+                "Unable to begin KVANTA5_P2QR migration transaction. Wallet was not modified.\n");
+            return DBErrors::CORRUPT;
+        }
+
+        bool migration_ok{true};
+
+        /*
+         * Rebuild the compact prefix from the validated merged key set.
+         * This also safely completes a wallet containing both old and new
+         * records after an interrupted or partially completed migration.
+         */
+        if (!batch.ErasePrefix(
+                DataStream() << DBKeys::KVANTA5_P2QR_SEED)) {
+            pwallet->WalletLogPrintf(
+                "Unable to clear existing compact KVANTA5_P2QR records.\n");
+            migration_ok = false;
+        }
+
+        size_t migrated{0};
+
+        if (migration_ok) {
+            for (const auto& [key_hash, record] : kvanta5_p2qr_seeds) {
+                if (!batch.Write(
+                        std::make_pair(
+                            DBKeys::KVANTA5_P2QR_SEED,
+                            key_hash),
+                        record)) {
+                    pwallet->WalletLogPrintf(
+                        "Unable to write compact KVANTA5_P2QR seed record %s.\n",
+                        key_hash.ToString());
+                    migration_ok = false;
+                    break;
+                }
+
+                ++migrated;
+
+                if (migrated % 50000 == 0) {
+                    pwallet->WalletLogPrintf(
+                        "KVANTA5_P2QR migration progress: %u of %u records written.\n",
+                        migrated,
+                        kvanta5_p2qr_seeds.size());
+                }
+            }
+        }
+
+        if (migration_ok &&
+            !batch.ErasePrefix(
+                DataStream() << DBKeys::KVANTA5_P2QR_KEY)) {
+            pwallet->WalletLogPrintf(
+                "Unable to erase legacy KVANTA5_P2QR key records.\n");
+            migration_ok = false;
+        }
+
+        if (!migration_ok) {
+            if (!batch.TxnAbort()) {
+                pwallet->WalletLogPrintf(
+                    "KVANTA5_P2QR migration failed and transaction rollback also failed.\n");
+            } else {
+                pwallet->WalletLogPrintf(
+                    "KVANTA5_P2QR migration failed. All database changes were rolled back.\n");
+            }
+            return DBErrors::CORRUPT;
+        }
+
+        if (!batch.TxnCommit()) {
+            pwallet->WalletLogPrintf(
+                "Unable to commit KVANTA5_P2QR migration transaction.\n");
+            return DBErrors::CORRUPT;
+        }
+
+        pwallet->WalletLogPrintf(
+            "KVANTA5_P2QR migration complete: %u compact seed records written and %u legacy records removed.\n",
+            migrated,
+            kvanta5_p2qr_key_res.m_records);
+
+        kvanta5_p2qr_migrated = true;
+
+    }
+
+
     // Make sure descriptor wallets don't have any legacy records
     if (pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
         for (const auto& type : DBKeys::LEGACY_TYPES) {
@@ -1219,8 +1405,10 @@ static DBErrors LoadDecryptionKeys(CWallet* pwallet, DatabaseBatch& batch) EXCLU
     return mkey_res.m_result;
 }
 
-DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
+DBErrors WalletBatch::LoadWallet(CWallet* pwallet, bool& kvanta5_p2qr_migrated)
 {
+    kvanta5_p2qr_migrated = false;
+
     DBErrors result = DBErrors::LOAD_OK;
     bool any_unordered = false;
     std::vector<uint256> upgraded_txs;
@@ -1247,7 +1435,13 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 #endif
 
         // Load legacy wallet keys
-        result = std::max(LoadLegacyWalletRecords(pwallet, *m_batch, last_client), result);
+        result = std::max(
+            LoadLegacyWalletRecords(
+                pwallet,
+                *m_batch,
+                last_client,
+                kvanta5_p2qr_migrated),
+            result);
 
         // Load descriptors
         result = std::max(LoadDescriptorWalletRecords(pwallet, *m_batch, last_client), result);

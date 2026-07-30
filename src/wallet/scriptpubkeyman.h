@@ -276,7 +276,7 @@ class Kvanta5P2QRScriptPubKeyMan : public ScriptPubKeyMan
 {
 private:
     mutable Mutex m_mutex;
-    std::map<uint256, P2QRKeyRecord> m_keys GUARDED_BY(m_mutex);
+    std::map<uint256, P2QRSeedRecord> m_keys GUARDED_BY(m_mutex);
     std::map<uint256, Kvanta5P2QRMultisigRecord> m_multisig GUARDED_BY(m_mutex);
 
     static uint256 KeyHashFromDestination(const Kvanta5P2QRDestination& dest)
@@ -299,8 +299,9 @@ public:
     bool CanProvide(const CScript& script, SignatureData& sigdata) override;
     bool SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const override;
 
+    bool LoadSeedRecord(const uint256& key_hash, const P2QRSeedRecord& record);
     bool LoadKey(const uint256& key_hash, const P2QRKeyRecord& record);
-    bool AddKey(WalletBatch& batch, const uint256& key_hash, const P2QRKeyRecord& record);
+    bool AddKey(WalletBatch& batch, const uint256& key_hash, const P2QRSeedRecord& record);
 
     bool ImportSeed(Span<const unsigned char> seed, Kvanta5P2QRDestination& dest);
     bool ExportSeed(const Kvanta5P2QRDestination& dest, std::vector<unsigned char>& seed_out) const;

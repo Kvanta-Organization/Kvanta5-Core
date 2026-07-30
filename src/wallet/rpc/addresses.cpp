@@ -231,45 +231,120 @@ RPCHelpMan getnewkvanta5p2qrminingaddress()
 RPCHelpMan getrawchangeaddress()
 {
     return RPCHelpMan{"getrawchangeaddress",
-                "\nReturns a new Kvanta5 address, for receiving change.\n"
-                "This is for use with raw transactions, NOT normal use.\n",
+                "\nReturns a new Kvanta5 P2QR address for receiving change.\n"
+                "By default this returns a native P2QR address.\n"
+                "Use address_type \"wrapped-p2sh\" to return a P2SH-carried "
+                "P2QR compatibility address.\n"
+                "Legacy, P2SH-SegWit, Bech32, and Bech32m change-address "
+                "creation is disabled in Kvanta5.\n",
                 {
-                    {"address_type", RPCArg::Type::STR, RPCArg::DefaultHint{"set by -changetype"}, "The address type to use. Options are \"legacy\", \"p2sh-segwit\", \"bech32\", and \"bech32m\"."},
+                    {
+                        "address_type",
+                        RPCArg::Type::STR,
+                        RPCArg::Default{"p2qr"},
+                        "The Kvanta5 change-address type. Options are "
+                        "\"p2qr\" and \"wrapped-p2sh\". Legacy Bitcoin "
+                        "address types are refused."
+                    },
                 },
                 RPCResult{
-                    RPCResult::Type::STR, "address", "The address"
+                    RPCResult::Type::STR,
+                    "address",
+                    "The new Kvanta5 P2QR change address"
                 },
                 RPCExamples{
                     HelpExampleCli("getrawchangeaddress", "")
-            + HelpExampleRpc("getrawchangeaddress", "")
+                    + HelpExampleCli(
+                        "getrawchangeaddress",
+                        "\"p2qr\""
+                    )
+                    + HelpExampleCli(
+                        "getrawchangeaddress",
+                        "\"wrapped-p2sh\""
+                    )
+                    + HelpExampleRpc("getrawchangeaddress", "")
                 },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        [&](const RPCHelpMan& self,
+            const JSONRPCRequest& request) -> UniValue
 {
-    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
-    if (!pwallet) return UniValue::VNULL;
+    std::shared_ptr<CWallet> const pwallet =
+        GetWalletForJSONRPCRequest(request);
+
+    if (!pwallet) {
+        return UniValue::VNULL;
+    }
 
     LOCK(pwallet->cs_wallet);
 
-    if (!pwallet->CanGetAddresses(true)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "Error: This wallet has no available keys");
+    if (pwallet->IsWalletFlagSet(
+            WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        throw JSONRPCError(
+            RPC_WALLET_ERROR,
+            "Cannot generate Kvanta5 P2QR change addresses "
+            "in a wallet with private keys disabled"
+        );
     }
 
-    OutputType output_type = pwallet->m_default_change_type.value_or(pwallet->m_default_address_type);
-    if (!request.params[0].isNull()) {
-        std::optional<OutputType> parsed = ParseOutputType(request.params[0].get_str());
-        if (!parsed) {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Unknown address type '%s'", request.params[0].get_str()));
-        } else if (parsed.value() == OutputType::BECH32M && pwallet->GetLegacyScriptPubKeyMan()) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "Legacy wallets cannot provide bech32m addresses");
-        }
-        output_type = parsed.value();
+    EnsureWalletIsUnlocked(*pwallet);
+
+    const std::string requested_type =
+        request.params[0].isNull()
+            ? "p2qr"
+            : request.params[0].get_str();
+
+    bool wrapped_p2sh{false};
+
+    if (requested_type == "p2qr" ||
+        requested_type == "kvanta5-p2qr" ||
+        requested_type == "kvanta5_p2qr" ||
+        requested_type == "kv5-p2qr" ||
+        requested_type == "kv5_p2qr") {
+        wrapped_p2sh = false;
+    } else if (
+        requested_type == "wrapped-p2sh" ||
+        requested_type == "wrapped_p2sh" ||
+        requested_type == "p2sh-wrapped" ||
+        requested_type == "p2sh_wrapped" ||
+        requested_type == "mining" ||
+        requested_type == "mining-address" ||
+        requested_type == "mining_address") {
+        wrapped_p2sh = true;
+    } else {
+        throw JSONRPCError(
+            RPC_INVALID_ADDRESS_OR_KEY,
+            strprintf(
+                "Kvanta5 refuses to create non-P2QR change "
+                "address type '%s'. Use \"p2qr\" or "
+                "\"wrapped-p2sh\".",
+                requested_type
+            )
+        );
     }
 
-    auto op_dest = pwallet->GetNewChangeDestination(output_type);
-    if (!op_dest) {
-        throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, util::ErrorString(op_dest).original);
+    auto op_script =
+        wrapped_p2sh
+            ? pwallet
+                  ->GetNewKvanta5P2QRCompatibilityChangeScript()
+            : pwallet->GetNewKvanta5P2QRChangeScript();
+
+    if (!op_script) {
+        throw JSONRPCError(
+            RPC_WALLET_ERROR,
+            util::ErrorString(op_script).original
+        );
     }
-    return EncodeDestination(*op_dest);
+
+    CTxDestination destination;
+
+    if (!ExtractDestination(*op_script, destination)) {
+        throw JSONRPCError(
+            RPC_WALLET_ERROR,
+            "Generated Kvanta5 P2QR change script could not "
+            "be converted to an address"
+        );
+    }
+
+    return EncodeDestination(destination);
 },
     };
 }

@@ -891,6 +891,7 @@ public:
 
     DBErrors LoadWallet();
     bool LoadKvanta5P2QRKey(const uint256& key_hash, const P2QRKeyRecord& record) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool LoadKvanta5P2QRSeed(const uint256& key_hash, const P2QRSeedRecord& record) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     /** Erases the provided transactions from the wallet. */
     util::Result<void> RemoveTxs(std::vector<uint256>& txs_to_remove) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     util::Result<void> RemoveTxs(WalletBatch& batch, std::vector<uint256>& txs_to_remove) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);

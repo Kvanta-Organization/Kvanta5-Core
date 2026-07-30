@@ -230,9 +230,8 @@ util::Result<CTxDestination> Kvanta5P2QRScriptPubKeyMan::GetNewDestination(const
         return util::Error{_("Error: Failed to generate KV5 P2QR key.")};
     }
 
-    P2QRKeyRecord record;
+    P2QRSeedRecord record;
     record.seed = key.GetSeedBytes();
-    record.pubkey = key.GetPubKeyBytes();
     record.creation_time = GetTime();
 
     const uint256 key_hash = key.GetHash();
@@ -329,6 +328,19 @@ bool Kvanta5P2QRScriptPubKeyMan::CanProvide(const CScript& script, SignatureData
     return IsMine(script) != ISMINE_NO;
 }
 
+bool Kvanta5P2QRScriptPubKeyMan::LoadSeedRecord(const uint256& key_hash, const P2QRSeedRecord& record)
+{
+    if (record.seed.size() != MLDSA87_SEED_SIZE) return false;
+
+    CPQKey key;
+    if (!key.SetSeedBytes(record.seed)) return false;
+    if (key.GetHash() != key_hash) return false;
+
+    LOCK(m_mutex);
+    m_keys[key_hash] = record;
+    return true;
+}
+
 bool Kvanta5P2QRScriptPubKeyMan::LoadKey(const uint256& key_hash, const P2QRKeyRecord& record)
 {
     if (record.seed.size() != MLDSA87_SEED_SIZE) return false;
@@ -339,18 +351,20 @@ bool Kvanta5P2QRScriptPubKeyMan::LoadKey(const uint256& key_hash, const P2QRKeyR
     if (key.GetPubKeyBytes() != record.pubkey) return false;
     if (key.GetHash() != key_hash) return false;
 
-    LOCK(m_mutex);
-    m_keys[key_hash] = record;
-    return true;
+    P2QRSeedRecord compact_record;
+    compact_record.seed = record.seed;
+    compact_record.creation_time = record.creation_time;
+
+    return LoadSeedRecord(key_hash, compact_record);
 }
 
-bool Kvanta5P2QRScriptPubKeyMan::AddKey(WalletBatch& batch, const uint256& key_hash, const P2QRKeyRecord& record)
+bool Kvanta5P2QRScriptPubKeyMan::AddKey(WalletBatch& batch, const uint256& key_hash, const P2QRSeedRecord& record)
 {
-    if (!LoadKey(key_hash, record)) {
+    if (!LoadSeedRecord(key_hash, record)) {
         return false;
     }
 
-    return batch.WriteKvanta5P2QRKey(key_hash, record);
+    return batch.WriteKvanta5P2QRSeed(key_hash, record);
 }
 
 bool Kvanta5P2QRScriptPubKeyMan::ImportSeed(Span<const unsigned char> seed, Kvanta5P2QRDestination& dest)
@@ -358,9 +372,8 @@ bool Kvanta5P2QRScriptPubKeyMan::ImportSeed(Span<const unsigned char> seed, Kvan
     CPQKey key;
     if (!key.SetSeed(seed)) return false;
 
-    P2QRKeyRecord record;
+    P2QRSeedRecord record;
     record.seed = key.GetSeedBytes();
-    record.pubkey = key.GetPubKeyBytes();
     record.creation_time = GetTime();
 
     const uint256 key_hash = key.GetHash();
@@ -411,10 +424,12 @@ bool Kvanta5P2QRScriptPubKeyMan::GetPubKeyForDestination(const Kvanta5P2QRDestin
     const auto it = m_keys.find(key_hash);
     if (it == m_keys.end()) return false;
 
-    if (it->second.pubkey.empty()) return false;
+    CPQKey key;
+    if (!key.SetSeedBytes(it->second.seed)) return false;
+    if (key.GetHash() != key_hash) return false;
 
-    pubkey_out = it->second.pubkey;
-    return true;
+    pubkey_out = key.GetPubKeyBytes();
+    return pubkey_out.size() == MLDSA87_PUBLIC_KEY_SIZE;
 }
 
 bool Kvanta5P2QRScriptPubKeyMan::AddMultisigPolicy(const uint256& program, const Kvanta5P2QRMultisigRecord& record)

@@ -66,6 +66,7 @@ extern const std::string ACTIVEINTERNALSPK;
 extern const std::string BESTBLOCK;
 extern const std::string BESTBLOCK_NOMERKLE;
 extern const std::string KVANTA5_P2QR_KEY;
+extern const std::string KVANTA5_P2QR_SEED;
 extern const std::string CRYPTED_KEY;
 extern const std::string CSCRIPT;
 extern const std::string DEFAULTKEY;
@@ -244,6 +245,7 @@ public:
     bool WriteKeyMetadata(const CKeyMetadata& meta, const CPubKey& pubkey, const bool overwrite);
     bool WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CKeyMetadata &keyMeta);
     bool WriteKvanta5P2QRKey(const uint256& key_hash, const P2QRKeyRecord& record);
+    bool WriteKvanta5P2QRSeed(const uint256& key_hash, const P2QRSeedRecord& record);
     bool WriteKvanta5P2QRMultisig(const uint256& program, const Kvanta5P2QRMultisigRecord& record);
     bool WriteCryptedKey(const CPubKey& vchPubKey, const std::vector<unsigned char>& vchCryptedSecret, const CKeyMetadata &keyMeta);
     bool WriteMasterKey(unsigned int nID, const CMasterKey& kMasterKey);
@@ -287,7 +289,7 @@ public:
     bool WriteActiveScriptPubKeyMan(uint8_t type, const uint256& id, bool internal);
     bool EraseActiveScriptPubKeyMan(uint8_t type, bool internal);
 
-    DBErrors LoadWallet(CWallet* pwallet);
+    DBErrors LoadWallet(CWallet* pwallet, bool& kvanta5_p2qr_migrated);
 
     //! write the hdchain model (external chain child index counter)
     bool WriteHDChain(const CHDChain& chain);

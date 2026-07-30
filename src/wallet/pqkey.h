@@ -29,6 +29,18 @@ public:
     }
 };
 
+class P2QRSeedRecord
+{
+public:
+    std::vector<unsigned char> seed;
+    int64_t creation_time{0};
+
+    SERIALIZE_METHODS(P2QRSeedRecord, obj)
+    {
+        READWRITE(obj.seed, obj.creation_time);
+    }
+};
+
 class Kvanta5P2QRMultisigRecord
 {
 public:

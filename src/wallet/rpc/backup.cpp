@@ -2593,7 +2593,12 @@ RPCHelpMan listdescriptors()
     for (const auto& spk_man : wallet->GetAllScriptPubKeyMans()) {
         const auto desc_spk_man = dynamic_cast<DescriptorScriptPubKeyMan*>(spk_man);
         if (!desc_spk_man) {
-            throw JSONRPCError(RPC_WALLET_ERROR, "Unexpected ScriptPubKey manager type.");
+                        /*
+             * Kvanta5's native P2QR ScriptPubKeyMan is not
+             * descriptor-backed. listdescriptors reports only
+             * Bitcoin descriptor managers and skips P2QR.
+             */
+            continue;
         }
         LOCK(desc_spk_man->cs_desc_man);
         const auto& wallet_descriptor = desc_spk_man->GetWalletDescriptor();

@@ -125,8 +125,8 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = std::numeric_limits<int>::max();
 
-        consensus.nMinimumChainWork = uint256{};
-        consensus.defaultAssumeValid = uint256{};
+        consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000000000000fd8788263439914325"};
+        consensus.defaultAssumeValid = uint256{"0000000000000014895bd3ed5c66244e2aa7aab8df2680ea8ccba3933f2c477c"};
 
         pchMessageStart[0] = 0x4b;
         pchMessageStart[1] = 0x56;
@@ -167,7 +167,20 @@ public:
            }
         };
 
-        m_assumeutxo_data = {};
+        m_assumeutxo_data = {
+           {
+              .height = 35'000,
+              .hash_serialized = AssumeutxoHash{
+                 uint256{
+                     "9fe8e33438accf379f8d66ed2568ba3b35b5d89b8e2e5891899f4193369aafcc"
+                 }
+              },
+              .m_chain_tx_count = 37'778,
+              .blockhash = uint256{
+                  "0000000000000014895bd3ed5c66244e2aa7aab8df2680ea8ccba3933f2c477c"
+              },
+          },
+       };
 
        chainTxData = ChainTxData{
            .nTime    = 1781969661,
