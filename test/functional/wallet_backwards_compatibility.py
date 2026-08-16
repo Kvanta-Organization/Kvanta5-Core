@@ -1,390 +1,438 @@
 #!/usr/bin/env python3
-# Copyright (c) 2015-2026 The Bitcoin Core developers
 # Copyright (c) 2026 The Kvanta5 Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Backwards compatibility functional test
 
-Test various backwards compatibility scenarios. Requires previous releases binaries,
-see test/README.md.
+"""Kvanta5 wallet backwards-compatibility tests.
 
-Due to RPC changes introduced in various versions the below tests
-won't work for older versions without some patches or workarounds.
+Kvanta5 Core 1.0.0 through 1.0.2 stored P2QR signing material in
+SQLite P2QRKeyRecord records:
 
-Use only the latest patch version of each release, unless a test specifically
-needs an older patch version.
+    seed + full ML-DSA-87 public key + creation time
+
+Kvanta5 Core 1.0.3 introduced compact P2QRSeedRecord storage:
+
+    seed + creation time
+
+This test exercises that real Kvanta5 compatibility boundary. It does
+not test inherited Bitcoin non-descriptor wallets, Berkeley DB, Bitcoin
+HD keypools, SegWit/Taproot wallet types, or Bitcoin migratewallet
+semantics.
 """
 
-import os
-import shutil
+try:
+    import sqlite3
+except ImportError:
+    pass
 
-from test_framework.blocktools import COINBASE_MATURITY
+import hashlib
+
 from test_framework.test_framework import Kvanta5TestFramework
-from test_framework.descriptors import descsum_create
-
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
 )
 
 
-class BackwardsCompatibilityTest(Kvanta5TestFramework):
+class WalletBackwardsCompatibilityTest(Kvanta5TestFramework):
+    LEGACY_RECORD_TYPE = b"kvanta5p2qrkey"
+    COMPACT_RECORD_TYPE = b"kvanta5p2qrseed"
+
+    # Frozen deterministic ML-DSA-87 seed. The resulting key identity must
+    # survive conversion from the 1.0.0-1.0.2 full-key record to the current
+    # compact seed-only record.
+    TEST_SEED = (
+        "000102030405060708090a0b0c0d0e0f"
+        "101112131415161718191a1b1c1d1e1f"
+    )
+
+    WALLET_NAME = "kvanta5_backcompat"
+
     def add_options(self, parser):
-        self.add_wallet_options(parser)
+        self.add_wallet_options(parser, descriptors=True, legacy=False)
 
     def set_test_params(self):
         self.setup_clean_chain = True
-        self.num_nodes = 11
-        # Add new version after each release:
-        self.extra_args = [
-            ["-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # Pre-release: use to mine blocks. noban for immediate tx relay
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # Pre-release: use to receive coins, swap wallets, etc
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # v25.0
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # v24.0.1
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # v23.0
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # v22.0
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # v0.21.0
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # v0.20.1
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=noban@127.0.0.1"], # v0.19.1
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=127.0.0.1"], # v0.18.1
-            ["-nowallet", "-walletrbf=1", "-addresstype=bech32", "-whitelist=127.0.0.1"], # v0.17.2
-        ]
-        self.wallet_names = [self.default_wallet_name]
+        self.num_nodes = 1
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
-        self.skip_if_no_previous_releases()
+        self.skip_if_no_sqlite()
+        self.skip_if_no_py_sqlite3()
 
-    def setup_nodes(self):
-        self.add_nodes(self.num_nodes, extra_args=self.extra_args, versions=[
-            None,
-            None,
-            250000,
-            240001,
-            230000,
-            220000,
-            210000,
-            200100,
-            190100,
-            180100,
-            170200,
-        ])
+    @staticmethod
+    def compact_size(value):
+        if value < 253:
+            return bytes([value])
+        if value <= 0xFFFF:
+            return b"\xfd" + value.to_bytes(2, "little")
+        if value <= 0xFFFFFFFF:
+            return b"\xfe" + value.to_bytes(4, "little")
+        return b"\xff" + value.to_bytes(8, "little")
 
-        self.start_nodes()
-        self.import_deterministic_coinbase_privkeys()
+    @classmethod
+    def serialize_bytes(cls, value):
+        return cls.compact_size(len(value)) + value
 
-    def split_version(self, node):
-        major = node.version // 10000
-        minor = (node.version % 10000) // 100
-        patch = (node.version % 100)
-        return (major, minor, patch)
+    @classmethod
+    def record_prefix(cls, record_type):
+        return cls.serialize_bytes(record_type)
 
-    def major_version_equals(self, node, major):
-        node_major, _, _ = self.split_version(node)
-        return node_major == major
+    @staticmethod
+    def sha256_file(path):
+        hasher = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
 
-    def major_version_less_than(self, node, major):
-        node_major, _, _ = self.split_version(node)
-        return node_major < major
+    @classmethod
+    def find_records(cls, conn, record_type):
+        prefix = cls.record_prefix(record_type)
+        matches = []
 
-    def major_version_at_least(self, node, major):
-        node_major, _, _ = self.split_version(node)
-        return node_major >= major
+        for key, value in conn.execute("SELECT * FROM main"):
+            key = bytes(key)
+            value = bytes(value)
 
-    def test_v19_addmultisigaddress(self):
-        if not self.is_bdb_compiled():
-            return
-        # Specific test for addmultisigaddress using v19
-        # See #18075
-        self.log.info("Testing 0.19 addmultisigaddress case (#18075)")
-        node_master = self.nodes[1]
-        node_v19 = self.nodes[self.num_nodes - 4]
-        node_v19.rpc.createwallet(wallet_name="w1_v19")
-        wallet = node_v19.get_wallet_rpc("w1_v19")
-        info = wallet.getwalletinfo()
-        assert info['private_keys_enabled']
-        assert info['keypoolsize'] > 0
-        # Use addmultisigaddress (see #18075)
-        address_18075 = wallet.rpc.addmultisigaddress(1, ["0296b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52", "037211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073"], "", "legacy")["address"]
-        assert wallet.getaddressinfo(address_18075)["solvable"]
-        node_v19.unloadwallet("w1_v19")
+            if key.startswith(prefix):
+                matches.append((key, value))
 
-        # Copy the 0.19 wallet to the last Kvanta5 Core version and open it:
-        shutil.copytree(
-            os.path.join(node_v19.wallets_path, "w1_v19"),
-            os.path.join(node_master.wallets_path, "w1_v19")
-        )
-        node_master.loadwallet("w1_v19")
-        wallet = node_master.get_wallet_rpc("w1_v19")
-        assert wallet.getaddressinfo(address_18075)["solvable"]
+        return matches
 
-        # Now copy that same wallet back to 0.19 to make sure no automatic upgrade breaks it
-        node_master.unloadwallet("w1_v19")
-        shutil.rmtree(os.path.join(node_v19.wallets_path, "w1_v19"))
-        shutil.copytree(
-            os.path.join(node_master.wallets_path, "w1_v19"),
-            os.path.join(node_v19.wallets_path, "w1_v19")
-        )
-        node_v19.loadwallet("w1_v19")
-        wallet = node_v19.get_wallet_rpc("w1_v19")
-        assert wallet.getaddressinfo(address_18075)["solvable"]
+    def convert_compact_record_to_legacy_fixture(
+        self,
+        wallet_db,
+        seed,
+        pubkey,
+    ):
+        """Rewrite one real compact P2QR row into the exact old record shape.
+
+        The database-key hash suffix is retained byte-for-byte from the real
+        P2QRSeedRecord written by Kvanta5. Only the record type and serialized
+        value are transformed:
+
+            kvanta5p2qrseed:
+                vector(seed) + int64(creation_time)
+
+        becomes:
+
+            kvanta5p2qrkey:
+                vector(seed) + vector(pubkey) + int64(creation_time)
+
+        This matches the P2QRKeyRecord serialization used by Kvanta5
+        1.0.0, 1.0.1, and 1.0.2.
+        """
+
+        compact_prefix = self.record_prefix(self.COMPACT_RECORD_TYPE)
+        legacy_prefix = self.record_prefix(self.LEGACY_RECORD_TYPE)
+
+        seed_serialized = self.serialize_bytes(seed)
+
+        conn = sqlite3.connect(wallet_db)
+
+        try:
+            compact_records = self.find_records(
+                conn,
+                self.COMPACT_RECORD_TYPE,
+            )
+            legacy_records = self.find_records(
+                conn,
+                self.LEGACY_RECORD_TYPE,
+            )
+
+            assert_equal(len(compact_records), 1)
+            assert_equal(len(legacy_records), 0)
+
+            compact_key, compact_value = compact_records[0]
+
+            assert compact_key.startswith(compact_prefix)
+
+            # std::pair<string, uint256> leaves the serialized uint256 after
+            # the serialized record-type string.
+            key_hash_serialized = compact_key[len(compact_prefix):]
+            assert_equal(len(key_hash_serialized), 32)
+
+            # P2QRSeedRecord is exactly:
+            #     vector<unsigned char> seed
+            #     int64_t creation_time
+            assert compact_value.startswith(seed_serialized)
+
+            creation_time_serialized = compact_value[
+                len(seed_serialized):
+            ]
+            assert_equal(len(creation_time_serialized), 8)
+
+            legacy_key = legacy_prefix + key_hash_serialized
+
+            legacy_value = (
+                seed_serialized
+                + self.serialize_bytes(pubkey)
+                + creation_time_serialized
+            )
+
+            with conn:
+                conn.execute(
+                    "DELETE FROM main WHERE key = ?",
+                    (compact_key,),
+                )
+                conn.execute(
+                    "INSERT INTO main VALUES(?, ?)",
+                    (legacy_key, legacy_value),
+                )
+
+            assert_equal(
+                len(
+                    self.find_records(
+                        conn,
+                        self.COMPACT_RECORD_TYPE,
+                    )
+                ),
+                0,
+            )
+            assert_equal(
+                len(
+                    self.find_records(
+                        conn,
+                        self.LEGACY_RECORD_TYPE,
+                    )
+                ),
+                1,
+            )
+
+            return creation_time_serialized
+
+        finally:
+            conn.close()
+
+    def assert_migrated_database(
+        self,
+        wallet_db,
+        seed,
+        creation_time_serialized,
+    ):
+        """Verify the old record is gone and compact storage is exact."""
+
+        conn = sqlite3.connect(wallet_db)
+
+        try:
+            legacy_records = self.find_records(
+                conn,
+                self.LEGACY_RECORD_TYPE,
+            )
+            compact_records = self.find_records(
+                conn,
+                self.COMPACT_RECORD_TYPE,
+            )
+
+            assert_equal(len(legacy_records), 0)
+            assert_equal(len(compact_records), 1)
+
+            _, compact_value = compact_records[0]
+
+            expected_value = (
+                self.serialize_bytes(seed)
+                + creation_time_serialized
+            )
+
+            assert_equal(compact_value, expected_value)
+
+        finally:
+            conn.close()
 
     def run_test(self):
-        node_miner = self.nodes[0]
-        node_master = self.nodes[1]
-        node_v21 = self.nodes[self.num_nodes - 5]
-        node_v17 = self.nodes[self.num_nodes - 1]
+        node = self.nodes[0]
 
-        legacy_nodes = self.nodes[2:] # Nodes that support legacy wallets
-        legacy_only_nodes = self.nodes[-4:] # Nodes that only support legacy wallets
-        descriptors_nodes = self.nodes[2:-4] # Nodes that support descriptor wallets
+        self.log.info(
+            "Verify unsupported inherited Bitcoin non-descriptor creation "
+            "remains rejected"
+        )
+        assert_raises_rpc_error(
+            -4,
+            "Kvanta5 supports descriptor wallets only",
+            node.createwallet,
+            wallet_name="unsupported_non_descriptor",
+            descriptors=False,
+        )
 
-        self.generatetoaddress(node_miner, COINBASE_MATURITY + 1, node_miner.getnewaddress())
+        self.log.info(
+            "Create supported Kvanta5 SQLite descriptor wallet"
+        )
+        node.createwallet(
+            wallet_name=self.WALLET_NAME,
+            descriptors=True,
+        )
+        wallet = node.get_wallet_rpc(self.WALLET_NAME)
 
-        # Sanity check the test framework:
-        res = node_v17.getblockchaininfo()
-        assert_equal(res['blocks'], COINBASE_MATURITY + 1)
+        wallet_info = wallet.getwalletinfo()
+        assert_equal(wallet_info["format"], "sqlite")
+        assert_equal(wallet_info["descriptors"], True)
+        assert_equal(wallet_info["keypoolsize"], 0)
 
-        self.log.info("Test wallet backwards compatibility...")
-        # Create a number of wallets and open them in older versions:
+        self.log.info(
+            "Create deterministic current-format P2QR identity"
+        )
+        imported = wallet.importkvanta5p2qrseed(
+            self.TEST_SEED,
+            "backcompat",
+        )
 
-        # w1: regular wallet, created on master: update this test when default
-        #     wallets can no longer be opened by older versions.
-        node_master.createwallet(wallet_name="w1")
-        wallet = node_master.get_wallet_rpc("w1")
-        info = wallet.getwalletinfo()
-        assert info['private_keys_enabled']
-        assert info['keypoolsize'] > 0
-        # Create a confirmed transaction, receiving coins
-        address = wallet.getnewaddress()
-        node_miner.sendtoaddress(address, 10)
-        self.sync_mempools()
-        self.generate(node_miner, 1)
-        # Create a conflicting transaction using RBF
-        return_address = node_miner.getnewaddress()
-        tx1_id = node_master.sendtoaddress(return_address, 1)
-        tx2_id = node_master.bumpfee(tx1_id)["txid"]
-        # Confirm the transaction
-        self.sync_mempools()
-        self.generate(node_miner, 1)
-        # Create another conflicting transaction using RBF
-        tx3_id = node_master.sendtoaddress(return_address, 1)
-        tx4_id = node_master.bumpfee(tx3_id)["txid"]
-        self.sync_mempools()
-        # Abandon transaction, but don't confirm
-        node_master.abandontransaction(tx3_id)
+        assert_equal(
+            imported["type"],
+            "kvanta5_p2qr_seed_import",
+        )
+        assert_equal(imported["seed"], self.TEST_SEED)
 
-        # w2: wallet with private keys disabled, created on master: update this
-        #     test when default wallets private keys disabled can no longer be
-        #     opened by older versions.
-        node_master.createwallet(wallet_name="w2", disable_private_keys=True)
-        wallet = node_master.get_wallet_rpc("w2")
-        info = wallet.getwalletinfo()
-        assert info['private_keys_enabled'] == False
-        assert info['keypoolsize'] == 0
+        address = imported["address"]
 
-        # w3: blank wallet, created on master: update this
-        #     test when default blank wallets can no longer be opened by older versions.
-        node_master.createwallet(wallet_name="w3", blank=True)
-        wallet = node_master.get_wallet_rpc("w3")
-        info = wallet.getwalletinfo()
-        assert info['private_keys_enabled']
-        assert info['keypoolsize'] == 0
+        address_info = wallet.getaddressinfo(address)
+        assert_equal(address_info["ismine"], True)
+        assert_equal(address_info["iskvanta5p2qr"], True)
+        assert_equal(address_info["p2qr_type"], "single")
+        assert_equal(address_info["labels"], ["backcompat"])
 
-        # Unload wallets and copy to older nodes:
-        node_master_wallets_dir = node_master.wallets_path
-        node_master.unloadwallet("w1")
-        node_master.unloadwallet("w2")
-        node_master.unloadwallet("w3")
+        assert "p2qr_pubkey" in address_info
+        pubkey = bytes.fromhex(address_info["p2qr_pubkey"])
+        seed = bytes.fromhex(self.TEST_SEED)
 
-        for node in legacy_nodes:
-            # Copy wallets to previous version
-            for wallet in os.listdir(node_master_wallets_dir):
-                dest = node.wallets_path / wallet
-                source = node_master_wallets_dir / wallet
-                if self.major_version_equals(node, 16):
-                    # 0.16 node expect the wallet to be in the wallet dir but as a plain file rather than in directories
-                    shutil.copyfile(source / "wallet.dat", dest)
-                else:
-                    shutil.copytree(source, dest)
+        # Preserve the exact identity information before rewriting the
+        # physical database record.
+        expected_program = address_info["p2qr_program"]
+        expected_pubkey = address_info["p2qr_pubkey"]
+        expected_script = address_info["scriptPubKey"]
 
-        self.test_v19_addmultisigaddress()
+        dumped = wallet.dumpkvanta5p2qrseed(address)
+        assert_equal(dumped["seed"], self.TEST_SEED)
 
-        self.log.info("Test that a wallet made on master can be opened on:")
-        # In descriptors wallet mode, run this test on the nodes that support descriptor wallets
-        # In legacy wallets mode, run this test on the nodes that support legacy wallets
-        for node in descriptors_nodes if self.options.descriptors else legacy_nodes:
-            self.log.info(f"- {node.version}")
-            for wallet_name in ["w1", "w2", "w3"]:
-                if self.major_version_less_than(node, 18) and wallet_name == "w3":
-                    # Blank wallets were introduced in v0.18.0. We test the loading error below.
-                    continue
-                if self.major_version_less_than(node, 22) and wallet_name == "w1" and self.options.descriptors:
-                    # Descriptor wallets created after 0.21 have taproot descriptors which 0.21 does not support, tested below
-                    continue
-                # Also try to reopen on master after opening on old
-                for n in [node, node_master]:
-                    n.loadwallet(wallet_name)
-                    wallet = n.get_wallet_rpc(wallet_name)
-                    info = wallet.getwalletinfo()
-                    if wallet_name == "w1":
-                        assert info['private_keys_enabled'] == True
-                        assert info['keypoolsize'] > 0
-                        txs = wallet.listtransactions()
-                        assert_equal(len(txs), 5)
-                        assert_equal(txs[1]["txid"], tx1_id)
-                        assert_equal(txs[2]["walletconflicts"], [tx1_id])
-                        assert_equal(txs[1]["replaced_by_txid"], tx2_id)
-                        assert not txs[1]["abandoned"]
-                        assert_equal(txs[1]["confirmations"], -1)
-                        assert_equal(txs[2]["blockindex"], 1)
-                        assert txs[3]["abandoned"]
-                        assert_equal(txs[4]["walletconflicts"], [tx3_id])
-                        assert_equal(txs[3]["replaced_by_txid"], tx4_id)
-                        assert not hasattr(txs[3], "blockindex")
-                    elif wallet_name == "w2":
-                        assert info['private_keys_enabled'] == False
-                        assert info['keypoolsize'] == 0
-                    else:
-                        assert info['private_keys_enabled'] == True
-                        assert info['keypoolsize'] == 0
+        wallet.unloadwallet()
 
-                    # Copy back to master
-                    wallet.unloadwallet()
-                    if n == node:
-                        shutil.rmtree(node_master.wallets_path / wallet_name)
-                        shutil.copytree(
-                            n.wallets_path / wallet_name,
-                            node_master.wallets_path / wallet_name,
-                        )
+        wallet_dir = node.wallets_path / self.WALLET_NAME
+        wallet_db = wallet_dir / self.wallet_data_filename
+        backup_path = wallet_dir / "legacywalletbackup.dat"
 
-        # Check that descriptor wallets don't work on legacy only nodes
-        if self.options.descriptors:
-            self.log.info("Test descriptor wallet incompatibility on:")
-            for node in legacy_only_nodes:
-                # RPC loadwallet failure causes kvanta5d to exit in <= 0.17, in addition to the RPC
-                # call failure, so the following test won't work:
-                # assert_raises_rpc_error(-4, "Wallet loading failed.", node_v17.loadwallet, 'w3')
-                if self.major_version_less_than(node, 18):
-                    continue
-                self.log.info(f"- {node.version}")
-                # Descriptor wallets appear to be corrupted wallets to old software
-                assert self.major_version_at_least(node, 18) and self.major_version_less_than(node, 21)
-                for wallet_name in ["w1", "w2", "w3"]:
-                    assert_raises_rpc_error(-4, "Wallet file verification failed: wallet.dat corrupt, salvage failed", node.loadwallet, wallet_name)
+        assert wallet_db.exists()
+        assert not backup_path.exists()
 
-        # Instead, we stop node and try to launch it with the wallet:
-        self.stop_node(node_v17.index)
-        if self.options.descriptors:
-            self.log.info("Test descriptor wallet incompatibility with 0.17")
-            # Descriptor wallets appear to be corrupted wallets to old software
-            node_v17.assert_start_raises_init_error(["-wallet=w1"], "Error: wallet.dat corrupt, salvage failed")
-            node_v17.assert_start_raises_init_error(["-wallet=w2"], "Error: wallet.dat corrupt, salvage failed")
-            node_v17.assert_start_raises_init_error(["-wallet=w3"], "Error: wallet.dat corrupt, salvage failed")
-        else:
-            self.log.info("Test blank wallet incompatibility with v17")
-            node_v17.assert_start_raises_init_error(["-wallet=w3"], "Error: Error loading w3: Wallet requires newer version of Kvanta5 Core")
-        self.start_node(node_v17.index)
+        self.log.info(
+            "Rewrite compact row as authentic Kvanta5 1.0.0-1.0.2 "
+            "P2QRKeyRecord"
+        )
+        creation_time_serialized = (
+            self.convert_compact_record_to_legacy_fixture(
+                wallet_db,
+                seed,
+                pubkey,
+            )
+        )
 
-        # When descriptors are enabled, w1 cannot be opened by 0.21 since it contains a taproot descriptor
-        if self.options.descriptors:
-            self.log.info("Test that 0.21 cannot open wallet containing tr() descriptors")
-            assert_raises_rpc_error(-1, "map::at", node_v21.loadwallet, "w1")
+        self.log.info(
+            "Load old Kvanta5 P2QR record and trigger current migration"
+        )
+        node.loadwallet(self.WALLET_NAME)
+        wallet = node.get_wallet_rpc(self.WALLET_NAME)
 
-        self.log.info("Test that a wallet can upgrade to and downgrade from master, from:")
-        for node in descriptors_nodes if self.options.descriptors else legacy_nodes:
-            self.log.info(f"- {node.version}")
-            wallet_name = f"up_{node.version}"
-            if self.major_version_less_than(node, 17):
-                # createwallet is only available in 0.17+
-                self.restart_node(node.index, extra_args=[f"-wallet={wallet_name}"])
-                wallet_prev = node.get_wallet_rpc(wallet_name)
-                address = wallet_prev.getnewaddress('', "bech32")
-                addr_info = wallet_prev.validateaddress(address)
-            else:
-                if self.major_version_at_least(node, 21):
-                    node.rpc.createwallet(wallet_name=wallet_name, descriptors=self.options.descriptors)
-                else:
-                    node.rpc.createwallet(wallet_name=wallet_name)
-                wallet_prev = node.get_wallet_rpc(wallet_name)
-                address = wallet_prev.getnewaddress('', "bech32")
-                addr_info = wallet_prev.getaddressinfo(address)
+        wallet_info = wallet.getwalletinfo()
+        assert_equal(wallet_info["format"], "sqlite")
+        assert_equal(wallet_info["descriptors"], True)
 
-            hdkeypath = addr_info["hdkeypath"].replace("'", "h")
-            pubkey = addr_info["pubkey"]
+        migrated_info = wallet.getaddressinfo(address)
 
-            # Make a backup of the wallet file
-            backup_path = os.path.join(self.options.tmpdir, f"{wallet_name}.dat")
-            wallet_prev.backupwallet(backup_path)
+        # The migration must preserve the exact ML-DSA/P2QR identity.
+        assert_equal(migrated_info["ismine"], True)
+        assert_equal(migrated_info["solvable"], True)
+        assert_equal(migrated_info["iskvanta5p2qr"], True)
+        assert_equal(migrated_info["p2qr_type"], "single")
+        assert_equal(
+            migrated_info["p2qr_program"],
+            expected_program,
+        )
+        assert_equal(
+            migrated_info["p2qr_pubkey"],
+            expected_pubkey,
+        )
+        assert_equal(
+            migrated_info["scriptPubKey"],
+            expected_script,
+        )
+        assert_equal(
+            migrated_info["labels"],
+            ["backcompat"],
+        )
 
-            # Remove the wallet from old node
-            if self.major_version_at_least(node, 17):
-                wallet_prev.unloadwallet()
-            else:
-                self.stop_node(node.index)
+        migrated_seed = wallet.dumpkvanta5p2qrseed(address)
+        assert_equal(migrated_seed["seed"], self.TEST_SEED)
+        assert_equal(migrated_seed["address"], address)
 
-            # Restore the wallet to master
-            load_res = node_master.restorewallet(wallet_name, backup_path)
+        # The backup is part of the Kvanta5 P2QR migration contract.
+        assert backup_path.exists()
+        backup_hash = self.sha256_file(backup_path)
 
-            # Make sure this wallet opens with only the migration warning. See https://github.com/kvanta5/kvanta5/pull/19054
-            if not self.options.descriptors:
-                # Legacy wallets will have only a deprecation warning
-                assert_equal(load_res["warnings"], ["Wallet loaded successfully. The legacy wallet type is being deprecated and support for creating and opening legacy wallets will be removed in the future. Legacy wallets can be migrated to a descriptor wallet with migratewallet."])
-            else:
-                assert "warnings" not in load_res
+        wallet.unloadwallet()
 
-            wallet = node_master.get_wallet_rpc(wallet_name)
-            info = wallet.getaddressinfo(address)
-            descriptor = f"wpkh([{info['hdmasterfingerprint']}{hdkeypath[1:]}]{pubkey})"
-            assert_equal(info["desc"], descsum_create(descriptor))
+        self.log.info(
+            "Verify physical SQLite migration result"
+        )
+        self.assert_migrated_database(
+            wallet_db,
+            seed,
+            creation_time_serialized,
+        )
 
-            # Make backup so the wallet can be copied back to old node
-            down_wallet_name = f"re_down_{node.version}"
-            down_backup_path = os.path.join(self.options.tmpdir, f"{down_wallet_name}.dat")
-            wallet.backupwallet(down_backup_path)
+        self.log.info(
+            "Reopen migrated wallet and verify migration is idempotent"
+        )
+        node.loadwallet(self.WALLET_NAME)
+        wallet = node.get_wallet_rpc(self.WALLET_NAME)
 
-            # Check that taproot descriptors can be added to 0.21 wallets
-            # This must be done after the backup is created so that 0.21 can still load
-            # the backup
-            if self.options.descriptors and self.major_version_equals(node, 21):
-                assert_raises_rpc_error(-12, "No bech32m addresses available", wallet.getnewaddress, address_type="bech32m")
-                xpubs = wallet.gethdkeys(active_only=True)
-                assert_equal(len(xpubs), 1)
-                assert_equal(len(xpubs[0]["descriptors"]), 6)
-                wallet.createwalletdescriptor("bech32m")
-                xpubs = wallet.gethdkeys(active_only=True)
-                assert_equal(len(xpubs), 1)
-                assert_equal(len(xpubs[0]["descriptors"]), 8)
-                tr_descs = [desc["desc"] for desc in xpubs[0]["descriptors"] if desc["desc"].startswith("tr(")]
-                assert_equal(len(tr_descs), 2)
-                for desc in tr_descs:
-                    assert info["hdmasterfingerprint"] in desc
-                wallet.getnewaddress(address_type="bech32m")
+        reopened_info = wallet.getaddressinfo(address)
+        assert_equal(reopened_info["ismine"], True)
+        assert_equal(reopened_info["iskvanta5p2qr"], True)
+        assert_equal(
+            reopened_info["p2qr_program"],
+            expected_program,
+        )
+        assert_equal(
+            reopened_info["p2qr_pubkey"],
+            expected_pubkey,
+        )
 
-            wallet.unloadwallet()
+        # A second load must not replace or mutate the pre-migration backup.
+        assert_equal(
+            self.sha256_file(backup_path),
+            backup_hash,
+        )
 
-            # Check that no automatic upgrade broke the downgrading the wallet
-            if self.major_version_less_than(node, 17):
-                # loadwallet is only available in 0.17+
-                shutil.copyfile(
-                    down_backup_path,
-                    node.wallets_path / down_wallet_name
-                )
-                self.start_node(node.index, extra_args=[f"-wallet={down_wallet_name}"])
-                wallet_res = node.get_wallet_rpc(down_wallet_name)
-                info = wallet_res.validateaddress(address)
-                assert_equal(info, addr_info)
-            else:
-                target_dir = node.wallets_path / down_wallet_name
-                os.makedirs(target_dir, exist_ok=True)
-                shutil.copyfile(
-                    down_backup_path,
-                    target_dir / "wallet.dat"
-                )
-                node.loadwallet(down_wallet_name)
-                wallet_res = node.get_wallet_rpc(down_wallet_name)
-                info = wallet_res.getaddressinfo(address)
-                assert_equal(info, addr_info)
+        self.log.info(
+            "Verify migrated P2QR wallet detects live payment without rescan"
+        )
 
-if __name__ == '__main__':
-    BackwardsCompatibilityTest(__file__).main()
+        # Kvanta5 regtest block 1 is the mandatory Dev Fund issuance.
+        # Block 2 is therefore the first normal miner coinbase.
+        blocks = self.generatetoaddress(
+            node,
+            2,
+            address,
+        )
+
+        assert_equal(len(blocks), 2)
+
+        wallet_info = wallet.getwalletinfo()
+        assert_equal(wallet_info["txcount"], 1)
+        assert_equal(wallet_info["immature_balance"], 50)
+
+        block_two = node.getblock(blocks[1], 2)
+        coinbase_txid = block_two["tx"][0]["txid"]
+
+        received = wallet.gettransaction(coinbase_txid)
+        assert_equal(received["amount"], 50)
+        assert_equal(len(received["details"]), 1)
+        assert_equal(received["details"][0]["address"], address)
+        assert_equal(received["details"][0]["category"], "immature")
+
+        self.log.info(
+            "Kvanta5 backwards-compatibility contract verified"
+        )
+
+
+if __name__ == "__main__":
+    WalletBackwardsCompatibilityTest(__file__).main()

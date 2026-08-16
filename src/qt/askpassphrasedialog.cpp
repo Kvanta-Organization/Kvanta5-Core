@@ -45,7 +45,6 @@ AskPassphraseDialog::AskPassphraseDialog(Mode _mode, QWidget *parent, SecureStri
             ui->passEdit1->hide();
             setWindowTitle(tr("Encrypt wallet"));
             break;
-        case UnlockMigration:
         case Unlock: // Ask passphrase
             ui->warningLabel->setText(tr("This operation needs your wallet passphrase to unlock the wallet."));
             ui->passLabel2->hide();
@@ -82,7 +81,7 @@ void AskPassphraseDialog::setModel(WalletModel *_model)
 void AskPassphraseDialog::accept()
 {
     SecureString oldpass, newpass1, newpass2;
-    if (!model && mode != Encrypt && mode != UnlockMigration)
+    if (!model && mode != Encrypt)
         return;
     oldpass.reserve(MAX_PASSPHRASE_SIZE);
     newpass1.reserve(MAX_PASSPHRASE_SIZE);
@@ -183,10 +182,6 @@ void AskPassphraseDialog::accept()
             QMessageBox::critical(this, tr("Wallet unlock failed"), e.what());
         }
         break;
-    case UnlockMigration:
-        Assume(m_passphrase_out)->assign(oldpass);
-        QDialog::accept();
-        break;
     case ChangePass:
         if(newpass1 == newpass2)
         {
@@ -230,7 +225,6 @@ void AskPassphraseDialog::textChanged()
     case Encrypt: // New passphrase x2
         acceptable = !ui->passEdit2->text().isEmpty() && !ui->passEdit3->text().isEmpty();
         break;
-    case UnlockMigration:
     case Unlock: // Old passphrase x1
         acceptable = !ui->passEdit1->text().isEmpty();
         break;

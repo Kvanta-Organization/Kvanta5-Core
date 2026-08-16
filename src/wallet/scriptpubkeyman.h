@@ -755,7 +755,6 @@ public:
     void UpgradeDescriptorCache();
 };
 
-/** struct containing information needed for migrating legacy wallets to descriptor wallets */
 } // namespace wallet
 
 #endif // KVANTA5_WALLET_SCRIPTPUBKEYMAN_H

@@ -90,7 +90,7 @@ extern const std::string WALLETDESCRIPTORKEY;
 extern const std::string WATCHMETA;
 extern const std::string WATCHS;
 
-// Keys in this set pertain only to the legacy wallet (LegacyScriptPubKeyMan) and are removed during migration from legacy to descriptors.
+// Database record types associated with LegacyScriptPubKeyMan compatibility data.
 extern const std::unordered_set<std::string> LEGACY_TYPES;
 } // namespace DBKeys
 
