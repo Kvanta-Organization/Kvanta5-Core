@@ -1,0 +1,128 @@
+name: Development CI
+
+on:
+  push:
+    branches:
+      - Development
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAKEJOBS: "-j4"
+  TEST_RUNNER_PORT_MIN: "14000"
+  CI_FAILFAST_TEST_LEAVE_DANGLING: "1"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: debian:bookworm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run lint suite
+        run: ./ci/lint_run_all.sh
+
+  ci-matrix:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: tidy
+            runner: ubuntu-latest
+            timeout: 120
+            file_env: ./ci/test/00_setup_env_native_tidy.sh
+
+          - name: ARM unit tests
+            runner: ubuntu-24.04-arm
+            timeout: 120
+            file_env: ./ci/test/00_setup_env_arm.sh
+
+          - name: ASan LSan UBSan integer
+            runner: ubuntu-24.04
+            timeout: 180
+            file_env: ./ci/test/00_setup_env_native_asan.sh
+
+          - name: Win64 cross
+            runner: ubuntu-latest
+            timeout: 180
+            file_env: ./ci/test/00_setup_env_win64.sh
+
+          - name: CentOS depends GUI
+            runner: ubuntu-latest
+            timeout: 180
+            file_env: ./ci/test/00_setup_env_native_centos.sh
+
+          - name: previous releases depends DEBUG
+            runner: ubuntu-latest
+            timeout: 180
+            file_env: ./ci/test/00_setup_env_native_previous_releases.sh
+
+          - name: TSan depends GUI
+            runner: ubuntu-latest
+            timeout: 180
+            file_env: ./ci/test/00_setup_env_native_tsan.sh
+
+          - name: MSan depends
+            runner: ubuntu-latest
+            timeout: 300
+            file_env: ./ci/test/00_setup_env_native_msan.sh
+
+          - name: MSan fuzz
+            runner: ubuntu-latest
+            timeout: 300
+            file_env: ./ci/test/00_setup_env_native_fuzz_with_msan.sh
+
+          - name: fuzz address undefined integer
+            runner: ubuntu-latest
+            timeout: 240
+            file_env: ./ci/test/00_setup_env_native_fuzz.sh
+
+          - name: multiprocess i686 DEBUG
+            runner: ubuntu-latest
+            timeout: 180
+            file_env: ./ci/test/00_setup_env_i686_multiprocess.sh
+
+          - name: no wallet libkvanta5kernel
+            runner: ubuntu-latest
+            timeout: 180
+            file_env: ./ci/test/00_setup_env_native_nowallet_libkvanta5kernel.sh
+
+          - name: macOS cross GUI
+            runner: ubuntu-latest
+            timeout: 180
+            file_env: ./ci/test/00_setup_env_mac_cross.sh
+
+    env:
+      FILE_ENV: ${{ matrix.file_env }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker sanity check
+        run: |
+          docker version
+          docker info
+
+      - name: Reduce ASLR entropy for memory sanitizers
+        if: ${{ contains(matrix.name, 'TSan') || contains(matrix.name, 'MSan') }}
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Run CI
+        run: ./ci/test_run_all.sh
