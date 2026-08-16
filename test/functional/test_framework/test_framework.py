@@ -231,15 +231,12 @@ class Kvanta5TestFramework(metaclass=Kvanta5TestMetaClass):
             self.options.descriptors = None
         elif self.options.descriptors is None:
             # Some wallet is either required or optionally used by the test.
-            # Prefer SQLite unless it isn't available
+            # Both descriptor and non-descriptor Kvanta5 wallets use SQLite.
             if self.is_sqlite_compiled():
                 self.options.descriptors = True
-            elif self.is_bdb_compiled():
-                self.options.descriptors = False
             else:
-                # If neither are compiled, tests requiring a wallet will be skipped and the value of self.options.descriptors won't matter
-                # It still needs to exist and be None in order for tests to work however.
-                # So set it to None, which will also set -disablewallet.
+                # If SQLite is unavailable, tests requiring a wallet will be skipped.
+                # Keep this as None so the framework also sets -disablewallet.
                 self.options.descriptors = None
 
         PortSeed.n = self.options.port_seed
@@ -967,10 +964,7 @@ class Kvanta5TestFramework(metaclass=Kvanta5TestMetaClass):
         self._requires_wallet = True
         if not self.is_wallet_compiled():
             raise SkipTest("wallet has not been compiled.")
-        if self.options.descriptors:
-            self.skip_if_no_sqlite()
-        else:
-            self.skip_if_no_bdb()
+        self.skip_if_no_sqlite()
 
     def skip_if_no_sqlite(self):
         """Skip the running test if sqlite has not been compiled."""
@@ -1030,10 +1024,7 @@ class Kvanta5TestFramework(metaclass=Kvanta5TestMetaClass):
     def is_specified_wallet_compiled(self):
         """Checks whether wallet support for the specified type
            (legacy or descriptor wallet) was compiled."""
-        if self.options.descriptors:
-            return self.is_sqlite_compiled()
-        else:
-            return self.is_bdb_compiled()
+        return self.is_sqlite_compiled()
 
     def is_wallet_tool_compiled(self):
         """Checks whether kvanta5-wallet was compiled."""
@@ -1056,8 +1047,8 @@ class Kvanta5TestFramework(metaclass=Kvanta5TestMetaClass):
         return self.config["components"].getboolean("USE_SQLITE")
 
     def is_bdb_compiled(self):
-        """Checks whether the wallet module was compiled with BDB support."""
-        return self.config["components"].getboolean("USE_BDB")
+        """Compatibility shim for BDB-only tests pending removal."""
+        return False
 
     def has_blockfile(self, node, filenum: str):
         return (node.blocks_path/ f"blk{filenum}.dat").is_file()

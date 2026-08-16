@@ -14,12 +14,6 @@
     "zeromq"
   ],
   "features": {
-    "berkeleydb": {
-      "description": "Enable Berkeley DB wallet support",
-      "dependencies": [
-        "berkeleydb"
-      ]
-    },
     "qt5": {
       "description": "Build GUI, Qt 5",
       "dependencies": [
@@ -43,7 +37,6 @@
     "wallet": {
       "description": "Enable wallet",
       "dependencies": [
-        "berkeleydb",
         "sqlite3"
       ]
     },

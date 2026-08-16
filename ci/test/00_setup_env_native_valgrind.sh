@@ -16,7 +16,7 @@ export TEST_RUNNER_EXTRA="--exclude feature_init,rpc_bind,feature_bind_extra"  #
 export GOAL="install"
 # TODO enable GUI
 export KVANTA5_CONFIG="\
- -DWITH_ZMQ=ON -DWITH_BDB=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF \
+ -DWITH_ZMQ=ON -DBUILD_GUI=OFF \
  -DCMAKE_C_COMPILER=clang-16 \
  -DCMAKE_CXX_COMPILER=clang++-16 \
 "

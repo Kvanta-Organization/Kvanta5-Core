@@ -50,7 +50,7 @@ static RPCHelpMan getwalletinfo()
                         {
                         {RPCResult::Type::STR, "walletname", "the wallet name"},
                         {RPCResult::Type::NUM, "walletversion", "the wallet version"},
-                        {RPCResult::Type::STR, "format", "the database format (bdb or sqlite)"},
+                        {RPCResult::Type::STR, "format", "the database format (sqlite)"},
                         {RPCResult::Type::STR_AMOUNT, "balance", "DEPRECATED. Identical to getbalances().mine.trusted"},
                         {RPCResult::Type::STR_AMOUNT, "unconfirmed_balance", "DEPRECATED. Identical to getbalances().mine.untrusted_pending"},
                         {RPCResult::Type::STR_AMOUNT, "immature_balance", "DEPRECATED. Identical to getbalances().mine.immature"},
@@ -355,9 +355,7 @@ static RPCHelpMan createwallet()
             {"blank", RPCArg::Type::BOOL, RPCArg::Default{false}, "Create a blank wallet. A blank wallet has no keys or HD seed. One can be set using sethdseed."},
             {"passphrase", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Encrypt the wallet with this passphrase."},
             {"avoid_reuse", RPCArg::Type::BOOL, RPCArg::Default{false}, "Keep track of coin reuse, and treat dirty and clean coins differently with privacy considerations in mind."},
-            {"descriptors", RPCArg::Type::BOOL, RPCArg::Default{true}, "Create a native descriptor wallet. The wallet will use descriptors internally to handle address creation."
-                                                                       " Setting to \"false\" will create a legacy wallet; This is only possible with the -deprecatedrpc=create_bdb setting because, the legacy wallet type is being deprecated and"
-                                                                       " support for creating and opening legacy wallets will be removed in the future."},
+            {"descriptors", RPCArg::Type::BOOL, RPCArg::Default{true}, "Create a Kvanta5 wallet. This parameter is retained for RPC compatibility and must be true."},
             {"load_on_startup", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Save wallet name to persistent settings and load on startup. True to add wallet to startup list, false to remove, null to leave unchanged."},
             {"external_signer", RPCArg::Type::BOOL, RPCArg::Default{false}, "Use an external signer such as a hardware wallet. Requires -signer to be configured. Wallet creation will fail if keys cannot be fetched. Requires disable_private_keys and descriptors set to true."},
         },
@@ -402,17 +400,13 @@ static RPCHelpMan createwallet()
     if (!request.params[4].isNull() && request.params[4].get_bool()) {
         flags |= WALLET_FLAG_AVOID_REUSE;
     }
-    if (self.Arg<bool>("descriptors")) {
-#ifndef USE_SQLITE
-        throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without sqlite support (required for descriptor wallets)");
-#endif
-        flags |= WALLET_FLAG_DESCRIPTORS;
-    } else {
-        if (!context.chain->rpcEnableDeprecated("create_bdb")) {
-            throw JSONRPCError(RPC_WALLET_ERROR, "BDB wallet creation is deprecated and will be removed in a future release."
-                                                 " In this release it can be re-enabled temporarily with the -deprecatedrpc=create_bdb setting.");
-        }
+    if (!self.Arg<bool>("descriptors")) {
+        throw JSONRPCError(
+            RPC_WALLET_ERROR,
+            "Kvanta5 supports descriptor wallets only"
+        );
     }
+    flags |= WALLET_FLAG_DESCRIPTORS;
     if (!request.params[7].isNull() && request.params[7].get_bool()) {
 #ifdef ENABLE_EXTERNAL_SIGNER
         flags |= WALLET_FLAG_EXTERNAL_SIGNER;
@@ -421,11 +415,6 @@ static RPCHelpMan createwallet()
 #endif
     }
 
-#ifndef USE_BDB
-    if (!(flags & WALLET_FLAG_DESCRIPTORS)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without bdb support (required for legacy wallets)");
-    }
-#endif
 
     DatabaseOptions options;
     DatabaseStatus status;
@@ -751,74 +740,6 @@ RPCHelpMan simulaterawtransaction()
 
     return result;
 }
-    };
-}
-
-static RPCHelpMan migratewallet()
-{
-    return RPCHelpMan{"migratewallet",
-        "\nMigrate the wallet to a descriptor wallet.\n"
-        "A new wallet backup will need to be made.\n"
-        "\nThe migration process will create a backup of the wallet before migrating. This backup\n"
-        "file will be named <wallet name>-<timestamp>.legacy.bak and can be found in the directory\n"
-        "for this wallet. In the event of an incorrect migration, the backup can be restored using restorewallet."
-        "\nEncrypted wallets must have the passphrase provided as an argument to this call.\n"
-        "\nThis RPC may take a long time to complete. Increasing the RPC client timeout is recommended.",
-        {
-            {"wallet_name", RPCArg::Type::STR, RPCArg::DefaultHint{"the wallet name from the RPC endpoint"}, "The name of the wallet to migrate. If provided both here and in the RPC endpoint, the two must be identical."},
-            {"passphrase", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "The wallet passphrase"},
-        },
-        RPCResult{
-            RPCResult::Type::OBJ, "", "",
-            {
-                {RPCResult::Type::STR, "wallet_name", "The name of the primary migrated wallet"},
-                {RPCResult::Type::STR, "watchonly_name", /*optional=*/true, "The name of the migrated wallet containing the watchonly scripts"},
-                {RPCResult::Type::STR, "solvables_name", /*optional=*/true, "The name of the migrated wallet containing solvable but not watched scripts"},
-                {RPCResult::Type::STR, "backup_path", "The location of the backup of the original wallet"},
-            }
-        },
-        RPCExamples{
-            HelpExampleCli("migratewallet", "")
-            + HelpExampleRpc("migratewallet", "")
-        },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
-        {
-            std::string wallet_name;
-            if (GetWalletNameFromJSONRPCRequest(request, wallet_name)) {
-                if (!(request.params[0].isNull() || request.params[0].get_str() == wallet_name)) {
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, "RPC endpoint wallet and wallet_name parameter specify different wallets");
-                }
-            } else {
-                if (request.params[0].isNull()) {
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Either RPC endpoint wallet or wallet_name parameter must be provided");
-                }
-                wallet_name = request.params[0].get_str();
-            }
-
-            SecureString wallet_pass;
-            wallet_pass.reserve(100);
-            if (!request.params[1].isNull()) {
-                wallet_pass = std::string_view{request.params[1].get_str()};
-            }
-
-            WalletContext& context = EnsureWalletContext(request.context);
-            util::Result<MigrationResult> res = MigrateLegacyToDescriptor(wallet_name, wallet_pass, context);
-            if (!res) {
-                throw JSONRPCError(RPC_WALLET_ERROR, util::ErrorString(res).original);
-            }
-
-            UniValue r{UniValue::VOBJ};
-            r.pushKV("wallet_name", res->wallet_name);
-            if (res->watchonly_wallet) {
-                r.pushKV("watchonly_name", res->watchonly_wallet->GetName());
-            }
-            if (res->solvables_wallet) {
-                r.pushKV("solvables_name", res->solvables_wallet->GetName());
-            }
-            r.pushKV("backup_path", res->backup_path.utf8string());
-
-            return r;
-        },
     };
 }
 
@@ -1168,7 +1089,6 @@ Span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &listwallets},
         {"wallet", &loadwallet},
         {"wallet", &lockunspent},
-        {"wallet", &migratewallet},
         {"wallet", &newkeypool},
         {"wallet", &removeprunedfunds},
         {"wallet", &rescanblockchain},

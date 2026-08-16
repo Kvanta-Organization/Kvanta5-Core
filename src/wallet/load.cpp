@@ -32,9 +32,8 @@ bool VerifyWallets(WalletContext& context)
     if (args.IsArgSet("-walletdir")) {
         const fs::path wallet_dir{args.GetPathArg("-walletdir")};
         std::error_code error;
-        // The canonical path cleans the path, preventing >1 Berkeley environment instances for the same directory
-        // It also lets the fs::exists and fs::is_directory checks below pass on windows, since they return false
-        // if a path has trailing slashes, and it strips trailing slashes.
+        // Canonicalize the wallet directory so duplicate path spellings resolve
+        // consistently and filesystem checks behave correctly across platforms.
         fs::path canonical_wallet_dir = fs::canonical(wallet_dir, error);
         if (error || !fs::exists(canonical_wallet_dir)) {
             chain.initError(strprintf(_("Specified -walletdir \"%s\" does not exist"), fs::PathToString(wallet_dir)));

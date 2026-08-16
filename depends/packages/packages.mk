@@ -13,9 +13,8 @@ qt_darwin_packages=qt
 qt_mingw32_packages=qt
 qt_freebsd_packages:=qt expat libxcb xcb_proto libXau xproto freetype fontconfig libxkbcommon libxcb_util libxcb_util_render libxcb_util_keysyms libxcb_util_image libxcb_util_wm
 
-wallet_packages=bdb sqlite
+wallet_packages=sqlite
 
-bdb_packages=bdb
 sqlite_packages=sqlite
 
 zmq_packages=zeromq

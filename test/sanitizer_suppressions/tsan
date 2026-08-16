@@ -6,8 +6,6 @@
 # race (TODO fix)
 race:LoadWallet
 race:WalletBatch::WriteHDChain
-race:BerkeleyBatch
-race:BerkeleyDatabase
 race:DatabaseBatch
 race:zmq::*
 race:kvanta5-qt
@@ -26,7 +24,6 @@ deadlock:src/qt/test/*
 
 # External libraries
 # https://github.com/kvanta5/kvanta5/pull/27658#issuecomment-1547639621
-deadlock:libdb
 race:libzmq
 
 # Intermittent issues

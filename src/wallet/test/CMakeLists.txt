@@ -23,5 +23,9 @@ target_sources(test_kvanta5
     walletdb_tests.cpp
     walletload_tests.cpp
     pqkey_tests.cpp
+    pqkey_entropy_tests.cpp
+    pqkey_kat_tests.cpp
+    pqkey_wallet_tests.cpp
+    pqkey_wallet_sqlite_tests.cpp
 )
 target_link_libraries(test_kvanta5 kvanta5_wallet)

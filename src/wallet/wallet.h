@@ -1146,20 +1146,6 @@ public:
     //! Add a descriptor to the wallet, return a ScriptPubKeyMan & associated output type
     ScriptPubKeyMan* AddWalletDescriptor(WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    /** Move all records from the BDB database to a new SQLite database for storage.
-     * The original BDB file will be deleted and replaced with a new SQLite file.
-     * A backup is not created.
-     * May crash if something unexpected happens in the filesystem.
-     */
-    bool MigrateToSQLite(bilingual_str& error) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-
-    //! Get all of the descriptors from a legacy wallet
-    std::optional<MigrationData> GetDescriptorsForLegacy(bilingual_str& error) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-
-    //! Adds the ScriptPubKeyMans given in MigrationData to this wallet, removes LegacyScriptPubKeyMan,
-    //! and where needed, moves tx and address book entries to watchonly_wallet or solvable_wallet
-    util::Result<void> ApplyMigrationData(WalletBatch& local_wallet_batch, MigrationData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-
     //! Whether the (external) signer performs R-value signature grinding
     bool CanGrindR() const;
 
@@ -1231,18 +1217,6 @@ bool AddWalletSetting(interfaces::Chain& chain, const std::string& wallet_name);
 //! Remove wallet name from persistent configuration so it will not be loaded on startup.
 bool RemoveWalletSetting(interfaces::Chain& chain, const std::string& wallet_name);
 
-struct MigrationResult {
-    std::string wallet_name;
-    std::shared_ptr<CWallet> wallet;
-    std::shared_ptr<CWallet> watchonly_wallet;
-    std::shared_ptr<CWallet> solvables_wallet;
-    fs::path backup_path;
-};
-
-//! Do all steps to migrate a legacy wallet to a descriptor wallet
-[[nodiscard]] util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& wallet_name, const SecureString& passphrase, WalletContext& context);
-//! Requirement: The wallet provided to this function must be isolated, with no attachment to the node's context.
-[[nodiscard]] util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet> local_wallet, const SecureString& passphrase, WalletContext& context, bool was_loaded);
 } // namespace wallet
 
 #endif // KVANTA5_WALLET_WALLET_H

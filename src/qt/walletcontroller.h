@@ -41,7 +41,6 @@ class path;
 class AskPassphraseDialog;
 class CreateWalletActivity;
 class CreateWalletDialog;
-class MigrateWalletActivity;
 class OpenWalletActivity;
 class WalletControllerActivity;
 
@@ -85,8 +84,6 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_load_wallet;
 
     friend class WalletControllerActivity;
-    friend class MigrateWalletActivity;
-
     //! Starts the wallet closure procedure
     void removeWallet(WalletModel* wallet_model);
 };
@@ -179,24 +176,6 @@ Q_SIGNALS:
     void restored(WalletModel* wallet_model);
 
 private:
-    void finish();
-};
-
-class MigrateWalletActivity : public WalletControllerActivity
-{
-    Q_OBJECT
-
-public:
-    MigrateWalletActivity(WalletController* wallet_controller, QWidget* parent) : WalletControllerActivity(wallet_controller, parent) {}
-
-    void migrate(const std::string& path);
-
-Q_SIGNALS:
-    void migrated(WalletModel* wallet_model);
-
-private:
-    QString m_success_message;
-
     void finish();
 };
 

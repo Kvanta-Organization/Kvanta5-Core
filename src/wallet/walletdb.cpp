@@ -18,10 +18,6 @@
 #include <util/fs.h>
 #include <util/time.h>
 #include <util/translation.h>
-#ifdef USE_BDB
-#include <wallet/bdb.h>
-#endif
-#include <wallet/migrate.h>
 #ifdef USE_SQLITE
 #include <wallet/sqlite.h>
 #endif
@@ -1648,99 +1644,52 @@ void WalletBatch::RegisterTxnListener(const DbTxnListener& l)
     m_txn_listeners.emplace_back(l);
 }
 
-std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error)
+std::unique_ptr<WalletDatabase> MakeDatabase(
+    const fs::path& path,
+    const DatabaseOptions& options,
+    DatabaseStatus& status,
+    bilingual_str& error)
 {
     bool exists;
     try {
         exists = fs::symlink_status(path).type() != fs::file_type::not_found;
     } catch (const fs::filesystem_error& e) {
-        error = Untranslated(strprintf("Failed to access database path '%s': %s", fs::PathToString(path), fsbridge::get_filesystem_error_message(e)));
+        error = Untranslated(strprintf(
+            "Failed to access database path '%s': %s",
+            fs::PathToString(path),
+            fsbridge::get_filesystem_error_message(e)));
         status = DatabaseStatus::FAILED_BAD_PATH;
         return nullptr;
     }
 
-    std::optional<DatabaseFormat> format;
-    if (exists) {
-        if (IsBDBFile(BDBDataFile(path))) {
-            format = DatabaseFormat::BERKELEY;
-        }
-        if (IsSQLiteFile(SQLiteDataFile(path))) {
-            if (format) {
-                error = Untranslated(strprintf("Failed to load database path '%s'. Data is in ambiguous format.", fs::PathToString(path)));
-                status = DatabaseStatus::FAILED_BAD_FORMAT;
-                return nullptr;
-            }
-            format = DatabaseFormat::SQLITE;
-        }
-    } else if (options.require_existing) {
-        error = Untranslated(strprintf("Failed to load database path '%s'. Path does not exist.", fs::PathToString(path)));
+    const bool sqlite_exists =
+        exists && IsSQLiteFile(SQLiteDataFile(path));
+
+    if (!exists && options.require_existing) {
+        error = Untranslated(strprintf(
+            "Failed to load database path '%s'. Path does not exist.",
+            fs::PathToString(path)));
         status = DatabaseStatus::FAILED_NOT_FOUND;
         return nullptr;
     }
 
-    if (!format && options.require_existing) {
-        error = Untranslated(strprintf("Failed to load database path '%s'. Data is not in recognized format.", fs::PathToString(path)));
+    if (exists && options.require_existing && !sqlite_exists) {
+        error = Untranslated(strprintf(
+            "Failed to load database path '%s'. Data is not in recognized SQLite wallet format.",
+            fs::PathToString(path)));
         status = DatabaseStatus::FAILED_BAD_FORMAT;
         return nullptr;
     }
 
-    if (format && options.require_create) {
-        error = Untranslated(strprintf("Failed to create database path '%s'. Database already exists.", fs::PathToString(path)));
+    if (sqlite_exists && options.require_create) {
+        error = Untranslated(strprintf(
+            "Failed to create database path '%s'. Database already exists.",
+            fs::PathToString(path)));
         status = DatabaseStatus::FAILED_ALREADY_EXISTS;
         return nullptr;
     }
 
-    // If BERKELEY was the format, then change the format from BERKELEY to BERKELEY_RO
-    if (format && options.require_format && format == DatabaseFormat::BERKELEY && options.require_format == DatabaseFormat::BERKELEY_RO) {
-        format = DatabaseFormat::BERKELEY_RO;
-    }
-
-    // A db already exists so format is set, but options also specifies the format, so make sure they agree
-    if (format && options.require_format && format != options.require_format) {
-        error = Untranslated(strprintf("Failed to load database path '%s'. Data is not in required format.", fs::PathToString(path)));
-        status = DatabaseStatus::FAILED_BAD_FORMAT;
-        return nullptr;
-    }
-
-    // Format is not set when a db doesn't already exist, so use the format specified by the options if it is set.
-    if (!format && options.require_format) format = options.require_format;
-
-    // If the format is not specified or detected, choose the default format based on what is available. We prefer BDB over SQLite for now.
-    if (!format) {
-#ifdef USE_SQLITE
-        format = DatabaseFormat::SQLITE;
-#endif
-#ifdef USE_BDB
-        format = DatabaseFormat::BERKELEY;
-#endif
-    }
-
-    if (format == DatabaseFormat::SQLITE) {
-#ifdef USE_SQLITE
-        if constexpr (true) {
-            return MakeSQLiteDatabase(path, options, status, error);
-        } else
-#endif
-        {
-            error = Untranslated(strprintf("Failed to open database path '%s'. Build does not support SQLite database format.", fs::PathToString(path)));
-            status = DatabaseStatus::FAILED_BAD_FORMAT;
-            return nullptr;
-        }
-    }
-
-    if (format == DatabaseFormat::BERKELEY_RO) {
-        return MakeBerkeleyRODatabase(path, options, status, error);
-    }
-
-#ifdef USE_BDB
-    if constexpr (true) {
-        return MakeBerkeleyDatabase(path, options, status, error);
-    } else
-#endif
-    {
-        error = Untranslated(strprintf("Failed to open database path '%s'. Build does not support Berkeley DB database format.", fs::PathToString(path)));
-        status = DatabaseStatus::FAILED_BAD_FORMAT;
-        return nullptr;
-    }
+    return MakeSQLiteDatabase(path, options, status, error);
 }
+
 } // namespace wallet

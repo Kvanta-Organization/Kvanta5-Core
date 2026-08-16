@@ -368,11 +368,6 @@ void Kvanta5GUI::createActions()
     m_close_all_wallets_action = new QAction(tr("Close All Wallets…"), this);
     m_close_all_wallets_action->setStatusTip(tr("Close all wallets"));
 
-    m_migrate_wallet_action = new QAction(tr("Migrate Wallet"), this);
-    m_migrate_wallet_action->setEnabled(false);
-    m_migrate_wallet_action->setStatusTip(tr("Migrate a wallet"));
-    m_migrate_wallet_menu = new QMenu(this);
-
     showHelpMessageAction = new QAction(tr("&Command-line options"), this);
     showHelpMessageAction->setMenuRole(QAction::NoRole);
     showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible Kvanta5 command-line options").arg(CLIENT_NAME));
@@ -467,32 +462,6 @@ void Kvanta5GUI::createActions()
         connect(m_close_all_wallets_action, &QAction::triggered, [this] {
             m_wallet_controller->closeAllWallets(this);
         });
-        connect(m_migrate_wallet_menu, &QMenu::aboutToShow, [this] {
-            m_migrate_wallet_menu->clear();
-            for (const auto& [wallet_name, info] : m_wallet_controller->listWalletDir()) {
-                const auto& [loaded, format] = info;
-
-                if (format != "bdb") { // Skip already migrated wallets
-                    continue;
-                }
-
-                QString name = GUIUtil::WalletDisplayName(wallet_name);
-                // An single ampersand in the menu item's text sets a shortcut for this item.
-                // Single & are shown when && is in the string. So replace & with &&.
-                name.replace(QChar('&'), QString("&&"));
-                QAction* action = m_migrate_wallet_menu->addAction(name);
-
-                connect(action, &QAction::triggered, [this, wallet_name] {
-                    auto activity = new MigrateWalletActivity(m_wallet_controller, this);
-                    connect(activity, &MigrateWalletActivity::migrated, this, &Kvanta5GUI::setCurrentWallet);
-                    activity->migrate(wallet_name);
-                });
-            }
-            if (m_migrate_wallet_menu->isEmpty()) {
-                QAction* action = m_migrate_wallet_menu->addAction(tr("No wallets available"));
-                action->setEnabled(false);
-            }
-        });
         connect(m_mask_values_action, &QAction::toggled, this, &Kvanta5GUI::setPrivacy);
         connect(m_mask_values_action, &QAction::toggled, this, &Kvanta5GUI::enableHistoryAction);
     }
@@ -514,7 +483,6 @@ void Kvanta5GUI::createMenuBar()
         file->addAction(m_open_wallet_action);
         file->addAction(m_close_wallet_action);
         file->addAction(m_close_all_wallets_action);
-        file->addAction(m_migrate_wallet_action);
         file->addSeparator();
         file->addAction(backupWalletAction);
         file->addAction(m_restore_wallet_action);
@@ -725,8 +693,6 @@ void Kvanta5GUI::setWalletController(WalletController* wallet_controller, bool s
     m_open_wallet_action->setEnabled(true);
     m_open_wallet_action->setMenu(m_open_wallet_menu);
     m_restore_wallet_action->setEnabled(true);
-    m_migrate_wallet_action->setEnabled(true);
-    m_migrate_wallet_action->setMenu(m_migrate_wallet_menu);
 
     GUIUtil::ExceptionSafeConnect(wallet_controller, &WalletController::walletAdded, this, &Kvanta5GUI::addWallet);
     connect(wallet_controller, &WalletController::walletRemoved, this, &Kvanta5GUI::removeWallet);

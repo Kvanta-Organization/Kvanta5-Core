@@ -11,6 +11,5 @@ target_sources(fuzz
     $<$<BOOL:${USE_SQLITE}>:${CMAKE_CURRENT_LIST_DIR}/notifications.cpp>
     $<$<BOOL:${USE_SQLITE}>:${CMAKE_CURRENT_LIST_DIR}/scriptpubkeyman.cpp>
     spend.cpp
-    wallet_bdb_parser.cpp
 )
 target_link_libraries(fuzz kvanta5_wallet)

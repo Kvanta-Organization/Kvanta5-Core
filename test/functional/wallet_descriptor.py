@@ -3,7 +3,7 @@
 # Copyright (c) 2026 The Kvanta5 Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test descriptor wallet function."""
+"""Test Kvanta5 descriptor-wallet policy and SQLite persistence."""
 
 try:
     import sqlite3
@@ -12,14 +12,13 @@ except ImportError:
 
 import concurrent.futures
 
+from test_framework.authproxy import JSONRPCException
 from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.descriptors import descsum_create
 from test_framework.test_framework import Kvanta5TestFramework
 from test_framework.util import (
     assert_equal,
-    assert_raises_rpc_error
+    assert_raises_rpc_error,
 )
-from test_framework.wallet_util import WalletUnlock
 
 
 class WalletDescriptorTest(Kvanta5TestFramework):
@@ -29,258 +28,264 @@ class WalletDescriptorTest(Kvanta5TestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
-        self.extra_args = [['-keypool=100']]
-        self.wallet_names = []
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
         self.skip_if_no_sqlite()
         self.skip_if_no_py_sqlite3()
 
-    def test_concurrent_writes(self):
-        self.log.info("Test sqlite concurrent writes are in the correct order")
-        self.restart_node(0, extra_args=["-unsafesqlitesync=0"])
-        self.nodes[0].createwallet(wallet_name="concurrency", blank=True)
-        wallet = self.nodes[0].get_wallet_rpc("concurrency")
-        # First import a descriptor that uses hardened dervation so that topping up
-        # Will require writing a ton to db
-        wallet.importdescriptors([{"desc":descsum_create("wpkh(tprv8ZgxMBicQKsPeuVhWwi6wuMQGfPKi9Li5GtX35jVNknACgqe3CY4g5xgkfDDJcmtF7o1QnxWDRYw4H5P26PXq7sbcUkEqeR4fg3Kxp2tigg/0h/0h/*h)"), "timestamp": "now", "active": True}])
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as thread:
-            topup = thread.submit(wallet.keypoolrefill, newsize=1000)
+    def assert_non_p2qr_types_rejected(self, wallet):
+        """Inherited Bitcoin address types must not become active Kvanta5 destinations."""
+        for address_type in ("legacy", "p2sh-segwit", "bech32", "bech32m"):
+            try:
+                wallet.getnewaddress("", address_type)
+            except JSONRPCException as exc:
+                message = exc.error["message"]
+                assert "non-P2QR" in message
+                assert "p2qr" in message
+            else:
+                raise AssertionError(
+                    f"getnewaddress unexpectedly accepted {address_type}"
+                )
 
-            # Then while the topup is running, we need to do something that will call
-            # ChainStateFlushed which will trigger a write to the db, hopefully at the
-            # same time that the topup still has an open db transaction.
+            try:
+                wallet.getrawchangeaddress(address_type)
+            except JSONRPCException as exc:
+                message = exc.error["message"]
+                assert "non-P2QR" in message
+                assert "p2qr" in message
+            else:
+                raise AssertionError(
+                    f"getrawchangeaddress unexpectedly accepted {address_type}"
+                )
+
+    def test_concurrent_writes(self):
+        """Exercise concurrent SQLite writes using actual P2QR wallet records."""
+        self.log.info("Test SQLite concurrent P2QR writes")
+
+        self.restart_node(0, extra_args=["-unsafesqlitesync=0"])
+        self.nodes[0].createwallet(
+            wallet_name="concurrency",
+            descriptors=True,
+        )
+        wallet = self.nodes[0].get_wallet_rpc("concurrency")
+
+        def generate_p2qr_addresses():
+            return [
+                wallet.getnewaddress("", "p2qr")
+                for _ in range(256)
+            ]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as thread:
+            writer = thread.submit(generate_p2qr_addresses)
+
+            # Trigger chain-state work while the wallet is persisting P2QR
+            # seed/address records to SQLite.
             self.nodes[0].cli.gettxoutsetinfo()
-            assert_equal(topup.result(), None)
+
+            addresses = writer.result()
+
+        assert_equal(len(addresses), 256)
+        assert_equal(len(set(addresses)), 256)
 
         wallet.unloadwallet()
 
-        # Check that everything was written
-        wallet_db = self.nodes[0].wallets_path / "concurrency" / self.wallet_data_filename
+        # Reopen the SQLite wallet and make sure persisted P2QR ownership
+        # survived the concurrent-write workload.
+        self.nodes[0].loadwallet("concurrency")
+        wallet = self.nodes[0].get_wallet_rpc("concurrency")
+
+        for address in addresses[::32]:
+            info = wallet.getaddressinfo(address)
+            assert_equal(info["ismine"], True)
+            assert_equal(info["iskvanta5p2qr"], True)
+
+        wallet.unloadwallet()
+
+    def test_unexpected_bitcoin_record_rejected(self):
+        self.log.info(
+            "Test rejection of unsupported inherited Bitcoin wallet records"
+        )
+
+        self.nodes[0].createwallet(
+            wallet_name="crashme",
+            descriptors=True,
+        )
+        self.nodes[0].unloadwallet("crashme")
+
+        wallet_db = (
+            self.nodes[0].wallets_path
+            / "crashme"
+            / self.wallet_data_filename
+        )
+
         conn = sqlite3.connect(wallet_db)
         with conn:
-            # Retrieve the bestblock_nomerkle record
-            bestblock_rec = conn.execute("SELECT value FROM main WHERE hex(key) = '1262657374626C6F636B5F6E6F6D65726B6C65'").fetchone()[0]
-            # Retrieve the number of descriptor cache records
-            # Since we store binary data, sqlite's comparison operators don't work everywhere
-            # so just retrieve all records and process them ourselves.
-            db_keys = conn.execute("SELECT key FROM main").fetchall()
-            cache_records = len([k[0] for k in db_keys if b"walletdescriptorcache" in k[0]])
+            # Inject an inherited Bitcoin "cscript" wallet record.
+            #
+            # "Legacy" in the loader error for this record means an old
+            # Bitcoin wallet record type. It does NOT mean Kvanta5's legacy
+            # full-private-key P2QR storage format.
+            conn.execute(
+                "INSERT INTO main VALUES(?, ?)",
+                (b"\x07cscript" + b"\x00" * 20, b"\x00"),
+            )
         conn.close()
 
-        assert_equal(bestblock_rec[5:37][::-1].hex(), self.nodes[0].getbestblockhash())
-        assert_equal(cache_records, 1000)
+        assert_raises_rpc_error(
+            -4,
+            "Unexpected legacy entry in descriptor wallet found.",
+            self.nodes[0].loadwallet,
+            "crashme",
+        )
 
     def run_test(self):
-        if self.is_bdb_compiled():
-            # Make a legacy wallet and check it is BDB
-            self.nodes[0].createwallet(wallet_name="legacy1", descriptors=False)
-            wallet_info = self.nodes[0].getwalletinfo()
-            assert_equal(wallet_info['format'], 'bdb')
-            self.nodes[0].unloadwallet("legacy1")
-        else:
-            self.log.warning("Skipping BDB test")
+        self.log.info("Test descriptor-only wallet creation policy")
 
-        # Make a descriptor wallet
-        self.log.info("Making a descriptor wallet")
-        self.nodes[0].createwallet(wallet_name="desc1", descriptors=True)
+        assert_raises_rpc_error(
+            -4,
+            "Kvanta5 supports descriptor wallets only",
+            self.nodes[0].createwallet,
+            wallet_name="unsupported_non_descriptor",
+            descriptors=False,
+        )
 
-        # A descriptor wallet should have 100 addresses * 4 types = 400 keys
-        self.log.info("Checking wallet info")
-        wallet_info = self.nodes[0].getwalletinfo()
-        assert_equal(wallet_info['format'], 'sqlite')
-        assert_equal(wallet_info['keypoolsize'], 400)
-        assert_equal(wallet_info['keypoolsize_hd_internal'], 400)
-        assert 'keypoololdest' not in wallet_info
+        self.log.info("Create supported SQLite descriptor wallet")
 
-        # Check that getnewaddress works
-        self.log.info("Test that getnewaddress and getrawchangeaddress work")
-        addr = self.nodes[0].getnewaddress("", "legacy")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('pkh(')
-        assert_equal(addr_info['hdkeypath'], 'm/44h/1h/0h/0/0')
+        self.nodes[0].createwallet(
+            wallet_name="desc1",
+            descriptors=True,
+        )
+        wallet = self.nodes[0].get_wallet_rpc("desc1")
 
-        addr = self.nodes[0].getnewaddress("", "p2sh-segwit")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('sh(wpkh(')
-        assert_equal(addr_info['hdkeypath'], 'm/49h/1h/0h/0/0')
+        info = wallet.getwalletinfo()
+        assert_equal(info["format"], "sqlite")
+        assert_equal(info["descriptors"], True)
 
-        addr = self.nodes[0].getnewaddress("", "bech32")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('wpkh(')
-        assert_equal(addr_info['hdkeypath'], 'm/84h/1h/0h/0/0')
+        # Kvanta5 P2QR does not use Bitcoin Core's HD descriptor keypool.
+        assert_equal(info["keypoolsize"], 0)
+        assert_equal(info.get("keypoolsize_hd_internal", 0), 0)
+        assert "hdseedid" not in info
 
-        addr = self.nodes[0].getnewaddress("", "bech32m")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('tr(')
-        assert_equal(addr_info['hdkeypath'], 'm/86h/1h/0h/0/0')
+        self.log.info("Test native P2QR receive address")
 
-        # Check that getrawchangeaddress works
-        addr = self.nodes[0].getrawchangeaddress("legacy")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('pkh(')
-        assert_equal(addr_info['hdkeypath'], 'm/44h/1h/0h/1/0')
+        native_receive = wallet.getnewaddress(
+            "native-receive",
+            "p2qr",
+        )
+        native_info = wallet.getaddressinfo(native_receive)
 
-        addr = self.nodes[0].getrawchangeaddress("p2sh-segwit")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('sh(wpkh(')
-        assert_equal(addr_info['hdkeypath'], 'm/49h/1h/0h/1/0')
+        assert_equal(native_info["ismine"], True)
+        assert_equal(native_info["solvable"], True)
+        assert_equal(native_info["iskvanta5p2qr"], True)
 
-        addr = self.nodes[0].getrawchangeaddress("bech32")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('wpkh(')
-        assert_equal(addr_info['hdkeypath'], 'm/84h/1h/0h/1/0')
+        self.log.info("Test wrapped P2SH-carried P2QR receive address")
 
-        addr = self.nodes[0].getrawchangeaddress("bech32m")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('tr(')
-        assert_equal(addr_info['hdkeypath'], 'm/86h/1h/0h/1/0')
+        wrapped_receive = wallet.getnewaddress(
+            "wrapped-receive",
+            "wrapped-p2sh",
+        )
+        wrapped_info = wallet.getaddressinfo(wrapped_receive)
 
-        # Make a wallet to receive coins at
-        self.nodes[0].createwallet(wallet_name="desc2", descriptors=True)
-        recv_wrpc = self.nodes[0].get_wallet_rpc("desc2")
-        send_wrpc = self.nodes[0].get_wallet_rpc("desc1")
+        assert_equal(wrapped_info["ismine"], True)
+        assert_equal(wrapped_info["solvable"], True)
+        assert_equal(wrapped_info["iskvanta5p2qr"], True)
+        assert_equal(
+            wrapped_info["mining_type"],
+            "p2sh_carried_kvanta5_p2qr",
+        )
 
-        # Generate some coins
-        self.generatetoaddress(self.nodes[0], COINBASE_MATURITY + 1, send_wrpc.getnewaddress())
+        self.log.info("Test native P2QR change address")
 
-        # Make transactions
-        self.log.info("Test sending and receiving")
-        addr = recv_wrpc.getnewaddress()
-        send_wrpc.sendtoaddress(addr, 10)
+        native_change = wallet.getrawchangeaddress("p2qr")
+        native_change_info = wallet.getaddressinfo(native_change)
 
-        # Make sure things are disabled
-        self.log.info("Test disabled RPCs")
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importprivkey, "cVpF924EspNh8KjYsfhgY96mmxvT6DgdWiTYMtMjuM74hJaU5psW")
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importpubkey, send_wrpc.getaddressinfo(send_wrpc.getnewaddress())["pubkey"])
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importaddress, recv_wrpc.getnewaddress())
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importmulti, [])
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.addmultisigaddress, 1, [recv_wrpc.getnewaddress()])
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.dumpprivkey, recv_wrpc.getnewaddress())
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.dumpwallet, 'wallet.dump')
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importwallet, 'wallet.dump')
-        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.sethdseed)
+        assert_equal(native_change_info["ismine"], True)
+        assert_equal(native_change_info["iskvanta5p2qr"], True)
+        assert_equal(native_change_info.get("labels", []), [])
 
-        self.log.info("Test encryption")
-        # Get the master fingerprint before encrypt
-        info1 = send_wrpc.getaddressinfo(send_wrpc.getnewaddress())
+        self.log.info("Test wrapped P2SH-carried P2QR change address")
 
-        # Encrypt wallet 0
-        send_wrpc.encryptwallet('pass')
-        with WalletUnlock(send_wrpc, "pass"):
-            addr = send_wrpc.getnewaddress()
-            info2 = send_wrpc.getaddressinfo(addr)
-            assert info1['hdmasterfingerprint'] != info2['hdmasterfingerprint']
-        assert 'hdmasterfingerprint' in send_wrpc.getaddressinfo(send_wrpc.getnewaddress())
-        info3 = send_wrpc.getaddressinfo(addr)
-        assert_equal(info2['desc'], info3['desc'])
+        wrapped_change = wallet.getrawchangeaddress("wrapped-p2sh")
+        wrapped_change_info = wallet.getaddressinfo(wrapped_change)
 
-        self.log.info("Test that getnewaddress still works after keypool is exhausted in an encrypted wallet")
-        for _ in range(500):
-            send_wrpc.getnewaddress()
+        assert_equal(wrapped_change_info["ismine"], True)
+        assert_equal(wrapped_change_info["iskvanta5p2qr"], True)
+        assert_equal(
+            wrapped_change_info["mining_type"],
+            "p2sh_carried_kvanta5_p2qr",
+        )
+        assert_equal(wrapped_change_info.get("labels", []), [])
 
-        self.log.info("Test that unlock is needed when deriving only hardened keys in an encrypted wallet")
-        with WalletUnlock(send_wrpc, "pass"):
-            send_wrpc.importdescriptors([{
-                "desc": "wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/0h/*h)#y4dfsj7n",
-                "timestamp": "now",
-                "range": [0,10],
-                "active": True
-            }])
-        # Exhaust keypool of 100
-        for _ in range(100):
-            send_wrpc.getnewaddress(address_type='bech32')
-        # This should now error
-        assert_raises_rpc_error(-12, "Keypool ran out, please call keypoolrefill first", send_wrpc.getnewaddress, '', 'bech32')
+        self.log.info("Test rejection of inherited Bitcoin address types")
+        self.assert_non_p2qr_types_rejected(wallet)
 
-        self.log.info("Test born encrypted wallets")
-        self.nodes[0].createwallet('desc_enc', False, False, 'pass', False, True)
-        enc_rpc = self.nodes[0].get_wallet_rpc('desc_enc')
-        enc_rpc.getnewaddress() # Makes sure that we can get a new address from a born encrypted wallet
+        self.log.info("Test P2QR sending and receiving")
 
-        self.log.info("Test blank descriptor wallets")
-        self.nodes[0].createwallet(wallet_name='desc_blank', blank=True, descriptors=True)
-        blank_rpc = self.nodes[0].get_wallet_rpc('desc_blank')
-        assert_raises_rpc_error(-4, 'This wallet has no available keys', blank_rpc.getnewaddress)
+        self.nodes[0].createwallet(
+            wallet_name="desc2",
+            descriptors=True,
+        )
+        recv_wallet = self.nodes[0].get_wallet_rpc("desc2")
 
-        self.log.info("Test descriptor wallet with disabled private keys")
-        self.nodes[0].createwallet(wallet_name='desc_no_priv', disable_private_keys=True, descriptors=True)
-        nopriv_rpc = self.nodes[0].get_wallet_rpc('desc_no_priv')
-        assert_raises_rpc_error(-4, 'This wallet has no available keys', nopriv_rpc.getnewaddress)
+        # Block 1 is Kvanta5's mandatory Dev Fund issuance, so mine through
+        # enough normal coinbases to obtain mature spendable P2QR funds.
+        self.generatetoaddress(
+            self.nodes[0],
+            COINBASE_MATURITY + 2,
+            wallet.getnewaddress("", "p2qr"),
+        )
 
-        self.log.info("Test descriptor exports")
-        self.nodes[0].createwallet(wallet_name='desc_export', descriptors=True)
-        exp_rpc = self.nodes[0].get_wallet_rpc('desc_export')
-        self.nodes[0].createwallet(wallet_name='desc_import', disable_private_keys=True, descriptors=True)
-        imp_rpc = self.nodes[0].get_wallet_rpc('desc_import')
+        receive_address = recv_wallet.getnewaddress(
+            "payment",
+            "p2qr",
+        )
 
-        addr_types = [('legacy', False, 'pkh(', '44h/1h/0h', -13),
-                      ('p2sh-segwit', False, 'sh(wpkh(', '49h/1h/0h', -14),
-                      ('bech32', False, 'wpkh(', '84h/1h/0h', -13),
-                      ('bech32m', False, 'tr(', '86h/1h/0h', -13),
-                      ('legacy', True, 'pkh(', '44h/1h/0h', -13),
-                      ('p2sh-segwit', True, 'sh(wpkh(', '49h/1h/0h', -14),
-                      ('bech32', True, 'wpkh(', '84h/1h/0h', -13),
-                      ('bech32m', True, 'tr(', '86h/1h/0h', -13)]
+        txid = wallet.sendtoaddress(receive_address, 10)
+        assert isinstance(txid, str)
+        assert len(txid) == 64
 
-        for addr_type, internal, desc_prefix, deriv_path, int_idx in addr_types:
-            int_str = 'internal' if internal else 'external'
+        self.generatetoaddress(
+            self.nodes[0],
+            1,
+            self.p2qr_mining_address,
+        )
 
-            self.log.info("Testing descriptor address type for {} {}".format(addr_type, int_str))
-            if internal:
-                addr = exp_rpc.getrawchangeaddress(address_type=addr_type)
-            else:
-                addr = exp_rpc.getnewaddress(address_type=addr_type)
-            desc = exp_rpc.getaddressinfo(addr)['parent_desc']
-            assert_equal(desc_prefix, desc[0:len(desc_prefix)])
-            idx = desc.index('/') + 1
-            assert_equal(deriv_path, desc[idx:idx + 9])
-            if internal:
-                assert_equal('1', desc[int_idx])
-            else:
-                assert_equal('0', desc[int_idx])
+        assert_equal(recv_wallet.getbalance(), 10)
 
-            self.log.info("Testing the same descriptor is returned for address type {} {}".format(addr_type, int_str))
-            for i in range(0, 10):
-                if internal:
-                    addr = exp_rpc.getrawchangeaddress(address_type=addr_type)
-                else:
-                    addr = exp_rpc.getnewaddress(address_type=addr_type)
-                test_desc = exp_rpc.getaddressinfo(addr)['parent_desc']
-                assert_equal(desc, test_desc)
+        self.log.info("Test blank descriptor wallet")
 
-            self.log.info("Testing import of exported {} descriptor".format(addr_type))
-            imp_rpc.importdescriptors([{
-                'desc': desc,
-                'active': True,
-                'next_index': 11,
-                'timestamp': 'now',
-                'internal': internal
-            }])
+        self.nodes[0].createwallet(
+            wallet_name="desc_blank",
+            blank=True,
+            descriptors=True,
+        )
+        blank_wallet = self.nodes[0].get_wallet_rpc("desc_blank")
 
-            for i in range(0, 10):
-                if internal:
-                    exp_addr = exp_rpc.getrawchangeaddress(address_type=addr_type)
-                    imp_addr = imp_rpc.getrawchangeaddress(address_type=addr_type)
-                else:
-                    exp_addr = exp_rpc.getnewaddress(address_type=addr_type)
-                    imp_addr = imp_rpc.getnewaddress(address_type=addr_type)
-                assert_equal(exp_addr, imp_addr)
+        assert_raises_rpc_error(
+            -4,
+            "This wallet has no available keys",
+            blank_wallet.getnewaddress,
+        )
 
-        self.log.info("Test that loading descriptor wallet containing legacy key types throws error")
-        self.nodes[0].createwallet(wallet_name="crashme", descriptors=True)
-        self.nodes[0].unloadwallet("crashme")
-        wallet_db = self.nodes[0].wallets_path / "crashme" / self.wallet_data_filename
-        conn = sqlite3.connect(wallet_db)
-        with conn:
-            # add "cscript" entry: key type is uint160 (20 bytes), value type is CScript (zero-length here)
-            conn.execute('INSERT INTO main VALUES(?, ?)', (b'\x07cscript' + b'\x00'*20, b'\x00'))
-        conn.close()
-        assert_raises_rpc_error(-4, "Unexpected legacy entry in descriptor wallet found.", self.nodes[0].loadwallet, "crashme")
+        self.log.info("Test descriptor wallet with private keys disabled")
 
+        self.nodes[0].createwallet(
+            wallet_name="desc_no_priv",
+            disable_private_keys=True,
+            descriptors=True,
+        )
+        no_priv_wallet = self.nodes[0].get_wallet_rpc("desc_no_priv")
+
+        assert_raises_rpc_error(
+            -4,
+            "This wallet has no available keys",
+            no_priv_wallet.getnewaddress,
+        )
+
+        self.test_unexpected_bitcoin_record_rejected()
         self.test_concurrent_writes()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     WalletDescriptorTest(__file__).main()

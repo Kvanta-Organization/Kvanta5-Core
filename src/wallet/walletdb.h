@@ -34,10 +34,8 @@ struct WalletContext;
  * - WalletBatch is an abstract modifier object for the wallet database, and encapsulates a database
  *   batch update as well as methods to act on the database. It should be agnostic to the database implementation.
  *
- * The following classes are implementation specific:
- * - BerkeleyEnvironment is an environment in which the database exists.
- * - BerkeleyDatabase represents a wallet database.
- * - BerkeleyBatch is a low-level database batch update.
+ * The concrete database backend is implemented by SQLiteDatabase
+ * and SQLiteBatch.
  */
 
 static const bool DEFAULT_FLUSHWALLET = true;
@@ -332,7 +330,7 @@ private:
  */
 bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func);
 
-//! Compacts BDB state so that wallet.dat is self-contained (if there are changes)
+//! Periodically flushes wallet database state when there are pending changes.
 void MaybeCompactWalletDB(WalletContext& context);
 
 bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);

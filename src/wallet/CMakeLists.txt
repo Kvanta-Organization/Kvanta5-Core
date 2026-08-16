@@ -15,7 +15,6 @@ add_library(kvanta5_wallet STATIC EXCLUDE_FROM_ALL
   fees.cpp
   interfaces.cpp
   load.cpp
-  migrate.cpp
   receive.cpp
   rpc/addresses.cpp
   rpc/backup.cpp
@@ -43,18 +42,12 @@ target_link_libraries(kvanta5_wallet
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
 )
 
-if(NOT USE_SQLITE AND NOT USE_BDB)
-  message(FATAL_ERROR "Wallet functionality requested but no BDB or SQLite support available.")
+if(NOT USE_SQLITE)
+  message(FATAL_ERROR "Wallet functionality requested but SQLite support unavailable.")
 endif()
-if(USE_SQLITE)
-  target_sources(kvanta5_wallet PRIVATE sqlite.cpp)
-  target_link_libraries(kvanta5_wallet
-    PRIVATE
-      $<TARGET_NAME_IF_EXISTS:unofficial::sqlite3::sqlite3>
-      $<TARGET_NAME_IF_EXISTS:SQLite::SQLite3>
-  )
-endif()
-if(USE_BDB)
-  target_sources(kvanta5_wallet PRIVATE bdb.cpp salvage.cpp)
-  target_link_libraries(kvanta5_wallet PUBLIC BerkeleyDB::BerkeleyDB)
-endif()
+target_sources(kvanta5_wallet PRIVATE sqlite.cpp)
+target_link_libraries(kvanta5_wallet
+  PRIVATE
+    $<TARGET_NAME_IF_EXISTS:unofficial::sqlite3::sqlite3>
+    $<TARGET_NAME_IF_EXISTS:SQLite::SQLite3>
+)

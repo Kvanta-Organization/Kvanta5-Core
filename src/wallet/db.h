@@ -182,10 +182,7 @@ public:
 };
 
 enum class DatabaseFormat {
-    BERKELEY,
     SQLITE,
-    BERKELEY_RO,
-    BERKELEY_SWAP,
 };
 
 struct DatabaseOptions {
@@ -222,9 +219,7 @@ std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& path
 void ReadDatabaseArgs(const ArgsManager& args, DatabaseOptions& options);
 std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
 
-fs::path BDBDataFile(const fs::path& path);
 fs::path SQLiteDataFile(const fs::path& path);
-bool IsBDBFile(const fs::path& path);
 bool IsSQLiteFile(const fs::path& path);
 } // namespace wallet
 

@@ -52,15 +52,11 @@ class FilelockTest(Kvanta5TestFramework):
                 self.nodes[0].createwallet(wallet_name=wallet_name, descriptors=descriptors)
                 wallet_dir = self.nodes[0].wallets_path
                 self.log.info("Check that we can't start a second kvanta5d instance using the same wallet")
-                if descriptors:
-                    expected_msg = f"Error: SQLiteDatabase: Unable to obtain an exclusive lock on the database, is it being used by another instance of {self.config['environment']['CLIENT_NAME']}?"
-                else:
-                    expected_msg = "Error: Error initializing wallet database environment"
+                expected_msg = f"Error: SQLiteDatabase: Unable to obtain an exclusive lock on the database, is it being used by another instance of {self.config['environment']['CLIENT_NAME']}?"
                 self.nodes[1].assert_start_raises_init_error(extra_args=[f'-walletdir={wallet_dir}', f'-wallet={wallet_name}', '-noserver'], expected_msg=expected_msg, match=ErrorMatch.PARTIAL_REGEX)
 
-            if self.is_bdb_compiled():
-                check_wallet_filelock(False)
             if self.is_sqlite_compiled():
+                check_wallet_filelock(False)
                 check_wallet_filelock(True)
 
 if __name__ == '__main__':

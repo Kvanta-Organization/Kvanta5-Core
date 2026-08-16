@@ -11,9 +11,6 @@
 static const char UNUSED *kvanta5_strings[] = {
 QT_TRANSLATE_NOOP("kvanta5-core", "The %s developers"),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
-"%s corrupt. Try using the wallet tool kvanta5-wallet to salvage or restoring "
-"a backup."),
-QT_TRANSLATE_NOOP("kvanta5-core", ""
 "%s failed to validate the -assumeutxo snapshot state. This indicates a "
 "hardware problem, or a bug in the software, or a bad software modification "
 "that allowed an invalid snapshot to be loaded. As a result of this, the node "
@@ -104,6 +101,8 @@ QT_TRANSLATE_NOOP("kvanta5-core", ""
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Flushing undo file to disk failed. This is likely the result of an I/O error."),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Generated Kvanta5 P2QR change script could not be converted to a destination."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Incompatible options: -dnsseed=1 was explicitly specified, but -onlynet "
 "forbids connections to IPv4/IPv6"),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
@@ -116,6 +115,35 @@ QT_TRANSLATE_NOOP("kvanta5-core", ""
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Invalid value detected for '-wallet' or '-nowallet'. '-wallet' requires a "
 "string value, while '-nowallet' accepts only '1' to disable all wallets"),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 change address must be wallet-owned native P2QR or wallet-owned "
+"compatibility-wrapper P2QR."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 change address type must match transaction type: native P2QR uses "
+"native P2QR change; compatibility-wrapper P2QR uses compatibility-wrapper "
+"change."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 final signed transaction fee is too low for P2QR-adjusted relay "
+"policy after fee adjustment: fee %s, required %s, adjusted vsize %d. "
+"Refusing to create an unbroadcast transaction."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 transaction fee deficit exceeds usable change and no recipient "
+"output could be reduced for subtract-fee-from-amount."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 transaction fee deficit exceeds usable change and subtract-fee-from-"
+"amount recipient output(s)."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 transaction has no native P2QR or compatibility-wrapper P2QR context."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 transaction requires additional fee but has no change output and no "
+"subtract-fee-from-amount recipient output could be reduced."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 wallet attempted to create Taproot output. Refusing transaction."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 wallet attempted to create a non-P2QR output. Refusing transaction."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Kvanta5 wallet refuses to create non-P2QR change. Use a native P2QR or "
+"compatibility-wrapper P2QR recipient."),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Maximum transaction weight is less than transaction weight without inputs"),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
@@ -131,9 +159,6 @@ QT_TRANSLATE_NOOP("kvanta5-core", ""
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "No wallet file format provided. To use createfromdump, -format=<format> must "
 "be provided."),
-QT_TRANSLATE_NOOP("kvanta5-core", ""
-"Option '-upnp' is set but UPnP support was dropped in version 29.0. Consider "
-"using '-natpmp' instead."),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Outbound connections restricted to CJDNS (-onlynet=cjdns) but -"
 "cjdnsreachable is not provided"),
@@ -195,10 +220,6 @@ QT_TRANSLATE_NOOP("kvanta5-core", ""
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "The transaction amount is too small to send after the fee has been deducted"),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
-"This error could occur if this wallet was not shutdown cleanly and was last "
-"loaded using a build with a newer version of Berkeley DB. If so, please use "
-"the software that last loaded this wallet"),
-QT_TRANSLATE_NOOP("kvanta5-core", ""
 "This is a pre-release test build - use at your own risk - do not use for "
 "mining or merchant applications"),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
@@ -212,6 +233,14 @@ QT_TRANSLATE_NOOP("kvanta5-core", ""
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Total length of network version string (%i) exceeds maximum length (%i). "
 "Reduce the number or size of uacomments."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Transaction needs a compatibility-wrapper P2QR change address, but we can't "
+"generate it."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Transaction needs a native P2QR change address, but we can't generate it."),
+QT_TRANSLATE_NOOP("kvanta5-core", ""
+"Transaction needs a wrapped P2SH P2QR change address, but we can't generate "
+"it."),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Transaction requires one destination of non-0 value, a non-0 feerate, or a "
 "pre-selected input"),
@@ -229,8 +258,7 @@ QT_TRANSLATE_NOOP("kvanta5-core", ""
 "\n"
 "The wallet might have been tampered with or created with malicious intent.\n"),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
-"Unknown wallet file format \"%s\" provided. Please provide one of \"bdb\" or "
-"\"sqlite\"."),
+"Unknown wallet file format \"%s\" provided. Kvanta5 supports only \"sqlite\"."),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Unrecognized descriptor found. Loading wallet %s\n"
 "\n"
@@ -242,10 +270,6 @@ QT_TRANSLATE_NOOP("kvanta5-core", ""
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Unsupported chainstate database format found. Please restart with -reindex-"
 "chainstate. This will rebuild the chainstate database."),
-QT_TRANSLATE_NOOP("kvanta5-core", ""
-"Wallet created successfully. The legacy wallet type is being deprecated and "
-"support for creating and opening legacy wallets will be removed in the "
-"future."),
 QT_TRANSLATE_NOOP("kvanta5-core", ""
 "Wallet loaded successfully. The legacy wallet type is being deprecated and "
 "support for creating and opening legacy wallets will be removed in the "
@@ -304,7 +328,6 @@ QT_TRANSLATE_NOOP("kvanta5-core", "Dump file %s does not exist."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Elliptic curve cryptography sanity check failure. %s is shutting down."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error creating %s"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error initializing block database"),
-QT_TRANSLATE_NOOP("kvanta5-core", "Error initializing wallet database environment %s!"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error loading %s"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error loading %s: Private keys can only be disabled during creation"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error loading %s: Wallet corrupted"),
@@ -322,18 +345,18 @@ QT_TRANSLATE_NOOP("kvanta5-core", "Error: Could not delete watchonly transaction
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Couldn't create cursor into database"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Disk space is low for %s"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Dumpfile checksum does not match. Computed %s, expected %s"),
+QT_TRANSLATE_NOOP("kvanta5-core", "Error: Failed to add KV5 P2QR address to address book."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Failed to create new watchonly wallet"),
+QT_TRANSLATE_NOOP("kvanta5-core", "Error: Failed to generate KV5 P2QR key."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Error: Failed to write KV5 P2QR key to wallet database."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Got key that was not hex: %s"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Got value that was not hex: %s"),
+QT_TRANSLATE_NOOP("kvanta5-core", "Error: KV5 P2QR SPKM returned non-P2QR destination."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Keypool ran out, please call keypoolrefill first"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Missing checksum"),
-QT_TRANSLATE_NOOP("kvanta5-core", "Error: No %s addresses available."),
-QT_TRANSLATE_NOOP("kvanta5-core", "Error: This wallet already uses SQLite"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: This wallet is already a descriptor wallet"),
-QT_TRANSLATE_NOOP("kvanta5-core", "Error: Unable to begin reading all records in the database"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Unable to make a backup of your wallet"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Unable to parse version %u as a uint32_t"),
-QT_TRANSLATE_NOOP("kvanta5-core", "Error: Unable to read all records in the database"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Unable to read wallet's best block locator record"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Unable to remove watchonly address book data"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Error: Unable to write data to disk for wallet %s"),
@@ -356,6 +379,7 @@ QT_TRANSLATE_NOOP("kvanta5-core", "Failed to write to coin database."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Failed to write undo data."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Failure removing transaction: %s"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Fee rate (%s) is lower than the minimum fee rate setting (%s)"),
+QT_TRANSLATE_NOOP("kvanta5-core", "Generic Bitcoin change destination reservation is disabled in Kvanta5."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Ignoring duplicate -wallet %s."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Importing…"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Incorrect or no genesis block found. Wrong datadir for network?"),
@@ -373,6 +397,15 @@ QT_TRANSLATE_NOOP("kvanta5-core", "Invalid amount for -%s=<amount>: '%s'"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Invalid netmask specified in -whitelist: '%s'"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Invalid port specified in %s: '%s'"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Invalid pre-selected input %s"),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 adjusted transaction vsize calculation failed."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 mixed-input change split failed: selected value is zero."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 refuses to generate non-P2QR address type '%s'."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 refuses to generate non-P2QR change type '%s'."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 wallet attempted to create SegWit output. Refusing transaction."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 wallet refuses to create transactions to non-P2QR outputs."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 wallet refuses to spend non-P2QR wallet inputs."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 wallet selected a non-P2QR input. Refusing transaction."),
+QT_TRANSLATE_NOOP("kvanta5-core", "Kvanta5 wallet selected no native P2QR or wrapped P2SH P2QR inputs."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Listening for incoming connections failed (listen returned error %s)"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Loading P2P addresses…"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Loading banlist…"),
@@ -403,6 +436,7 @@ QT_TRANSLATE_NOOP("kvanta5-core", "Settings file could not be written"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Signer did not echo address"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Signer echoed unexpected address %s"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Signer returned error: %s"),
+QT_TRANSLATE_NOOP("kvanta5-core", "Signing transaction failed after Kvanta5 final fee adjustment"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Signing transaction failed"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Specified -walletdir \"%s\" does not exist"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Specified -walletdir \"%s\" is a relative path"),
@@ -427,7 +461,6 @@ QT_TRANSLATE_NOOP("kvanta5-core", "Transaction amount too small"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Transaction amounts must not be negative"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Transaction change output index out of range"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Transaction must have at least one recipient"),
-QT_TRANSLATE_NOOP("kvanta5-core", "Transaction needs a change address, but we can't generate it."),
 QT_TRANSLATE_NOOP("kvanta5-core", "Transaction too large"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Unable to bind to %s on this computer (bind returned error %s)"),
 QT_TRANSLATE_NOOP("kvanta5-core", "Unable to bind to %s on this computer. %s is probably already running."),

@@ -33,7 +33,6 @@
 enum class OutputType;
 
 namespace wallet {
-struct MigrationData;
 class ScriptPubKeyMan;
 
 // Wallet storage things that ScriptPubKeyMans need in order to be able to store things to the wallet database.
@@ -419,7 +418,6 @@ public:
 
     /** Get the DescriptorScriptPubKeyMans (with private keys) that have the same scriptPubKeys as this LegacyScriptPubKeyMan.
      * Does not modify this ScriptPubKeyMan. */
-    std::optional<MigrationData> MigrateToDescriptor();
     /** Delete all the records of this LegacyScriptPubKeyMan from disk*/
     bool DeleteRecords();
     bool DeleteRecordsWithDB(WalletBatch& batch);
@@ -758,16 +756,6 @@ public:
 };
 
 /** struct containing information needed for migrating legacy wallets to descriptor wallets */
-struct MigrationData
-{
-    CExtKey master_key;
-    std::vector<std::pair<std::string, int64_t>> watch_descs;
-    std::vector<std::pair<std::string, int64_t>> solvable_descs;
-    std::vector<std::unique_ptr<DescriptorScriptPubKeyMan>> desc_spkms;
-    std::shared_ptr<CWallet> watchonly_wallet{nullptr};
-    std::shared_ptr<CWallet> solvable_wallet{nullptr};
-};
-
 } // namespace wallet
 
 #endif // KVANTA5_WALLET_SCRIPTPUBKEYMAN_H

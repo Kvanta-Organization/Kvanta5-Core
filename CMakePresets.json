@@ -79,8 +79,6 @@
         "ENABLE_EXTERNAL_SIGNER": "ON",
         "ENABLE_HARDENING": "ON",
         "ENABLE_WALLET": "ON",
-        "WARN_INCOMPATIBLE_BDB": "OFF",
-        "WITH_BDB": "ON",
         "WITH_MULTIPROCESS": "ON",
         "WITH_QRENCODE": "ON",
         "WITH_SQLITE": "ON",

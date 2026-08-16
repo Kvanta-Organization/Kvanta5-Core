@@ -62,11 +62,6 @@ bool DumpWallet(const ArgsManager& args, WalletDatabase& db, bilingual_str& erro
 
     // Write out the file format
     std::string format = db.Format();
-    // BDB files that are opened using BerkeleyRODatabase have it's format as "bdb_ro"
-    // We want to override that format back to "bdb"
-    if (format == "bdb_ro") {
-        format = "bdb";
-    }
     line = strprintf("%s,%s\n", "format", format);
     dump_file.write(line.data(), line.size());
     hasher << Span{line};
@@ -182,17 +177,13 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
         error = _("No wallet file format provided. To use createfromdump, -format=<format> must be provided.");
         return false;
     }
-    DatabaseFormat data_format;
-    if (file_format == "bdb") {
-        data_format = DatabaseFormat::BERKELEY;
-    } else if (file_format == "sqlite") {
-        data_format = DatabaseFormat::SQLITE;
-    } else if (file_format == "bdb_swap") {
-        data_format = DatabaseFormat::BERKELEY_SWAP;
-    } else {
-        error = strprintf(_("Unknown wallet file format \"%s\" provided. Please provide one of \"bdb\" or \"sqlite\"."), file_format);
+    if (file_format != "sqlite") {
+        error = strprintf(
+            _("Unknown wallet file format \"%s\" provided. Kvanta5 supports only \"sqlite\"."),
+            file_format);
         return false;
     }
+    const DatabaseFormat data_format = DatabaseFormat::SQLITE;
     if (file_format != format_value) {
         warnings.push_back(strprintf(_("Warning: Dumpfile wallet format \"%s\" does not match command line specified format \"%s\"."), format_value, file_format));
     }
